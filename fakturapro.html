@@ -168,6 +168,25 @@
     border:1px solid var(--line);background:#fff;border-radius:6px;padding:8px 10px;margin-bottom:6px;cursor:pointer}
   .pick:hover{border-color:var(--gold);background:#fffdf8}
   .pick span:first-child{font-weight:600;color:var(--ink)}
+  /* ---- katalog materiálů ---- */
+  .kat-src{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+  .kat-src .chip{font-size:12.5px;padding:5px 14px}
+  .pick.kat-pick{align-items:center;justify-content:flex-start}
+  .kat-pick .kat-img,.cen-thumb{flex:0 0 auto;width:46px;height:46px;border-radius:6px;background:#fff;border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;overflow:hidden;color:var(--line);font-size:18px;font-weight:400}
+  .kat-pick .kat-img img,.cen-thumb img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+  .kat-pick .kat-main{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .kat-pick .kat-main b{color:var(--ink);font-weight:600}
+  .kat-pick .kat-meta{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .kat-pick .kat-cena{flex:0 0 auto;text-align:right;white-space:nowrap;font-size:13px}
+  .kat-pick .kat-cena .small{display:block}
+  .kat-info{padding:10px 6px;font-size:12.5px;color:var(--muted)}
+  .kat-info.err{color:var(--err)}
+  .cen-thumb{width:34px;height:34px;font-size:14px}
+  .cen-name{display:flex;gap:10px;align-items:center}
+  .badge.kat{background:#e8f0f8;color:#2d5a8a}
+  .badge.katoff{background:var(--warn-bg);color:var(--warn)}
+  .kat-diff-up{color:var(--err)} .kat-diff-down{color:var(--ok)}
 
   /* ---- tisková šablona (nabídka) ---- */
   #printArea{display:none}
@@ -372,7 +391,8 @@
         <option value="rezie">Režie</option>
         <option value="ostatni">Ostatní</option>
       </select>
-      <input class="search" id="cenikSearch" placeholder="Hledat položku…">
+      <input class="search" id="cenikSearch" placeholder="Hledat položku, kód, EAN…">
+      <button class="btn" id="btnKatSync" style="display:none" title="Dohledá položky ceníku v katalogu materiálů (podle kódu a EAN) a nabídne aktuální ceny">⟳ Aktualizovat z katalogu</button>
       <button class="btn" id="btnImportCenik">⬆ Import z Excelu</button>
       <button class="btn gold" id="btnAddCenik">+ Nová položka</button>
     </div>
@@ -795,6 +815,8 @@
           </datalist>
         </div>
         <div class="field"><label class="req">Cena za MJ (bez DPH)</label><input id="cCena" inputmode="decimal" placeholder="0,00"></div>
+        <div class="field"><label>EAN <span class="muted small">(čárový kód – propojí položku s katalogem)</span></label><input id="cEan" inputmode="numeric" placeholder="např. 8592410000276"></div>
+        <div class="field" id="cKatInfo" style="display:none"></div>
         <div class="field full"><label>Poznámka</label><textarea id="cPozn"></textarea></div>
       </div>
     </div>
@@ -830,6 +852,22 @@
       <button class="btn" data-close>Zrušit</button>
       <button class="btn" id="impApply2" type="button" style="display:none">Nahradit celý ceník</button>
       <button class="btn gold" id="impApply" type="button" style="display:none">Přidat k ceníku</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== AKTUALIZACE Z KATALOGU ===== -->
+<div class="backdrop" id="katSyncModal">
+  <div class="modal" style="max-width:820px">
+    <div class="modal-head"><h3>Aktualizace ceníku z katalogu materiálů</h3><button class="x" data-close>×</button></div>
+    <div class="modal-body">
+      <div id="katSyncSum" class="small" style="margin:0 0 12px;font-weight:600;color:var(--navy)"></div>
+      <div id="katSyncBody" style="max-height:420px;overflow:auto"></div>
+    </div>
+    <div class="modal-foot">
+      <span class="msg" id="katSyncMsg"></span>
+      <button class="btn" data-close>Zrušit</button>
+      <button class="btn gold" id="katSyncApply" type="button">Použít vybrané</button>
     </div>
   </div>
 </div>
@@ -3532,14 +3570,24 @@ function renderCenik(){
   const f=_filt.value;
   let rows=DB.cenik.slice().sort((a,b)=>a.nazev.localeCompare(b.nazev,'cs'));
   if(f) rows=rows.filter(c=>c.kategorie===f);
-  if(q) rows=rows.filter(c=>[c.nazev,c.kod].some(v=>(v||'').toLowerCase().includes(q)));
+  if(q) rows=rows.filter(c=>[c.nazev,c.kod,c.ean].some(v=>(v||'').toLowerCase().includes(q)));
   const body=document.getElementById('cenikBody');
   document.getElementById('cenikCount').textContent=DB.cenik.length+' položek';
   document.getElementById('cenikEmpty').style.display=DB.cenik.length?'none':'block';
+  const _sync=document.getElementById('btnKatSync'); if(_sync) _sync.style.display=(typeof katOn==='function'&&katOn())?'':'none';
+  const katMeta=c=>{
+    const bits=[];
+    if(c.ean) bits.push('EAN '+esc(c.ean));
+    if(c.skupina) bits.push(esc(c.skupina));
+    let h=bits.length?'<br><span class="small muted">'+bits.join(' · ')+'</span>':'';
+    if(c.katKod) h+=' <span class="badge '+(c.katNeaktivni?'katoff':'kat')+'" title="'+(c.katNeaktivni?'Položka už v katalogu není':'Propojeno s katalogem materiálů')+'">'+(c.katNeaktivni?'mimo katalog':'katalog')+'</span>';
+    return h;
+  };
+  const hasFoto=rows.some(c=>c.foto);
   body.innerHTML=rows.map(c=>`
     <tr>
       <td class="small muted">${esc(c.kod||'—')}</td>
-      <td><b>${esc(c.nazev)}</b>${c.pozn?`<br><span class="small muted">${esc(c.pozn)}</span>`:''}</td>
+      <td>${hasFoto?'<div class="cen-name">'+(typeof katImg==='function'?katImg(c.foto,'cen-thumb'):'')+'<div>':''}<b>${esc(c.nazev)}</b>${katMeta(c)}${c.pozn?`<br><span class="small muted">${esc(c.pozn)}</span>`:''}${hasFoto?'</div></div>':''}</td>
       <td><span class="badge ${c.kategorie}">${KAT_LABEL[c.kategorie]||''}</span></td>
       <td>${esc(c.mj)}</td>
       <td class="num">${fmtCena(c.cena)}</td>
@@ -3560,6 +3608,15 @@ function openCenikModal(c){
   document.getElementById('cMj').value=c?.mj||'';
   document.getElementById('cCena').value=c?(''+c.cena).replace('.',','):'';
   document.getElementById('cPozn').value=c?.pozn||'';
+  document.getElementById('cEan').value=c?.ean||'';
+  const _ki=document.getElementById('cKatInfo');
+  if(c&&c.katKod){
+    _ki.style.display='';
+    _ki.innerHTML='<label>Katalog materiálů</label><div style="display:flex;gap:10px;align-items:center">'+katImg(c.foto,'cen-thumb')+
+      '<div class="small">'+(c.katNeaktivni?'<span class="badge katoff">už v katalogu není</span>':'<span class="badge kat">propojeno</span>')+
+      ' kód '+esc(c.katKod)+(c.katCena!=null?'<br><span class="muted">cena v katalogu: '+fmtCena(c.katCena)+(c.katAkt?' ('+esc(fmtDatumKat(c.katAkt))+')':'')+'</span>':'')+
+      (c.tema||c.skupina?'<br><span class="muted">'+esc([c.tema,c.skupina].filter(Boolean).join(' › '))+'</span>':'')+'</div></div>';
+  } else { _ki.style.display='none'; _ki.innerHTML=''; }
   setMsg('cMsg','');
   document.getElementById('cenikModal').classList.add('show');
   setTimeout(()=>document.getElementById('cNazev').focus(),50);
@@ -3578,13 +3635,21 @@ function saveCenik(){
   if(!nazev){ setMsg('cMsg','Vyplňte název položky.'); return; }
   if(!mj){ setMsg('cMsg','Vyplňte měrnou jednotku.'); return; }
   if(isNaN(cena)){ setMsg('cMsg','Vyplňte platnou cenu.'); return; }
+  const ean=document.getElementById('cEan').value.replace(/\s/g,'');
+  if(ean && !/^\d{8,14}$/.test(ean)){ setMsg('cMsg','EAN má mít 8–14 číslic (nebo nechte prázdné).'); return; }
+  // zachovat ostatní údaje položky (fotka, vazba na katalog…)
+  const old=editingCenikId? (DB.cenik.find(c=>c.id===editingCenikId)||{}) : {};
   const rec={
+    ...old,
     id:editingCenikId||uid(),
     kod:document.getElementById('cKod').value.trim(),
     kategorie:document.getElementById('cKat').value,
     nazev, mj, cena,
-    pozn:document.getElementById('cPozn').value.trim()
+    pozn:document.getElementById('cPozn').value.trim(),
+    ean
   };
+  // změněný EAN = položka se při příští aktualizaci spáruje znovu podle nového EAN
+  if(old.ean && old.ean!==ean && rec.katKod){ delete rec.katKod; delete rec.katCena; delete rec.katNeaktivni; }
   if(editingCenikId){ const i=DB.cenik.findIndex(c=>c.id===editingCenikId); DB.cenik[i]=rec; }
   else DB.cenik.push(rec);
   document.getElementById('cenikModal').classList.remove('show');
@@ -3794,12 +3859,13 @@ function pickChips(active,fn){ const cats=[['','Vše'],['material','Materiál'],
 function setNbPickKat(k){ nbPickKat=k; nbPickRender(); }
 function setFaPickKat(k){ faPickKat=k; faPickRender(); }
 function nbPickRender(){
+  if(katPickMode('nb')) return;
   document.getElementById('nbPickChips').innerHTML=pickChips(nbPickKat,'setNbPickKat');
   updateIdxNote('nbIdxNote','nbKontakt');
   const q=norm(document.getElementById('nbPickSearch').value);
   let list=DB.cenik.slice().sort((a,b)=>a.nazev.localeCompare(b.nazev,'cs'));
   if(nbPickKat) list=list.filter(c=>c.kategorie===nbPickKat);
-  if(q) list=list.filter(c=>norm(c.nazev).includes(q)||norm(c.kod).includes(q));
+  if(q) list=list.filter(c=>norm(c.nazev).includes(q)||norm(c.kod).includes(q)||norm(c.ean).includes(q));
   list=list.slice(0,12);
   document.getElementById('nbPickList').innerHTML = list.length
     ? list.map(c=>'<button type="button" class="pick" onclick="nbAddFromCenik(DB.cenik.find(x=>x.id===\''+c.id+'\'))"><span>'+esc(c.nazev)+'</span><span class="muted small">'+esc(c.mj)+' · '+fmtCena(c.cena)+'</span></button>').join('')
@@ -3981,12 +4047,13 @@ function faAddFromCenik(c){ if(!c) return; FA.polozky.push({nazev:c.nazev,mj:c.m
 function faAddEmpty(){ FA.polozky.push({nazev:'',mj:'ks',mnozstvi:1,cena:0,sleva:0,sazba:21,kat:'prace'}); renderFaItems(); }
 function faDelRow(i){ FA.polozky.splice(i,1); renderFaItems(); }
 function faPickRender(){
+  if(katPickMode('fa')) return;
   document.getElementById('faPickChips').innerHTML=pickChips(faPickKat,'setFaPickKat');
   updateIdxNote('faIdxNote','faKontakt');
   const q=norm(document.getElementById('faPickSearch').value);
   let list=DB.cenik.slice().sort((a,b)=>a.nazev.localeCompare(b.nazev,'cs'));
   if(faPickKat) list=list.filter(c=>c.kategorie===faPickKat);
-  if(q) list=list.filter(c=>norm(c.nazev).includes(q)||norm(c.kod).includes(q));
+  if(q) list=list.filter(c=>norm(c.nazev).includes(q)||norm(c.kod).includes(q)||norm(c.ean).includes(q));
   list=list.slice(0,12);
   document.getElementById('faPickList').innerHTML = list.length
     ? list.map(c=>'<button type="button" class="pick" onclick="faAddFromCenik(DB.cenik.find(x=>x.id===\''+c.id+'\'))"><span>'+esc(c.nazev)+'</span><span class="muted small">'+esc(c.mj)+' · '+fmtCena(c.cena)+'</span></button>').join('')
@@ -4495,6 +4562,7 @@ function norm(s){ return (s==null?'':(''+s)).toLowerCase().normalize('NFD').repl
 function matchCol(h){
   const n=norm(h);
   if(n==='kod') return 'kod';
+  if(['ean','ean kod','kod ean','carovy kod','carovy kod ean','gtin'].includes(n)) return 'ean';
   if(n.indexOf('kateg')===0) return 'kategorie';
   if(['nazev','nazev polozky','polozka','popis','predmet plneni','oznaceni'].includes(n)) return 'nazev';
   if(['mj','merna jednotka','jednotka','mnozstevni jednotka'].includes(n)) return 'mj';
@@ -4521,6 +4589,7 @@ function parseCena(v){
   const n=parseFloat(s); return isNaN(n)?null:n;
 }
 function findCenik(it){
+  if(it.ean){ const e=DB.cenik.find(c=>c.ean && c.ean===it.ean); if(e) return e; }
   if(it.kod){ const b=DB.cenik.find(c=>c.kod && norm(c.kod)===norm(it.kod)); if(b) return b; }
   return DB.cenik.find(c=>norm(c.nazev)===norm(it.nazev)) || null;
 }
@@ -4582,7 +4651,8 @@ function parseRows(rows){
       kod:(''+cell(row,'kod')).trim(),
       kategorie:kat, nazev,
       mj:(''+cell(row,'mj')).trim()||'ks',
-      cena, pozn:(''+cell(row,'pozn')).trim()
+      cena, pozn:(''+cell(row,'pozn')).trim(),
+      ean:katEanZBunky(cell(row,'ean'))
     });
   }
   pendingImport=items;
@@ -4602,7 +4672,7 @@ function showPreview(items, skipped){
   const neu=items.length-upd;
   sum.innerHTML='Nalezeno <b>'+items.length+'</b> položek — '+neu+' nových, '+upd+' k aktualizaci'+(skipped?', '+skipped+' přeskočeno (chybí cena)':'')+'.';
   prev.innerHTML='<div class="card"><table><thead><tr><th>Kód</th><th>Název</th><th>Kategorie</th><th>MJ</th><th class="num">Cena</th></tr></thead><tbody>'+
-    items.slice(0,120).map(it=>'<tr><td class="small muted">'+esc(it.kod||'—')+'</td><td>'+esc(it.nazev)+'</td><td><span class="badge '+it.kategorie+'">'+esc(KAT_LABEL[it.kategorie]||pendingKats[it.kategorie]||it.kategorie)+'</span></td><td>'+esc(it.mj)+'</td><td class="num">'+fmtCena(it.cena)+'</td></tr>').join('')+
+    items.slice(0,120).map(it=>'<tr><td class="small muted">'+esc(it.kod||'—')+(it.ean?'<br>EAN '+esc(it.ean):'')+'</td><td>'+esc(it.nazev)+'</td><td><span class="badge '+it.kategorie+'">'+esc(KAT_LABEL[it.kategorie]||pendingKats[it.kategorie]||it.kategorie)+'</span></td><td>'+esc(it.mj)+'</td><td class="num">'+fmtCena(it.cena)+'</td></tr>').join('')+
     (items.length>120?'<tr><td colspan="5" class="muted small" style="padding:10px 14px">… a dalších '+(items.length-120)+'</td></tr>':'')+
     '</tbody></table></div>';
   document.getElementById('impApply').style.display='';
@@ -4618,7 +4688,7 @@ function applyImport(mode){
   let neu=0,upd=0;
   pendingImport.forEach(it=>{
     const ex = mode==='replace'? null : findCenik(it);
-    if(ex){ ex.kod=it.kod||ex.kod; ex.kategorie=it.kategorie; ex.nazev=it.nazev; ex.mj=it.mj; ex.cena=it.cena; if(it.pozn) ex.pozn=it.pozn; upd++; }
+    if(ex){ ex.kod=it.kod||ex.kod; ex.kategorie=it.kategorie; ex.nazev=it.nazev; ex.mj=it.mj; ex.cena=it.cena; if(it.pozn) ex.pozn=it.pozn; if(it.ean) ex.ean=it.ean; upd++; }
     else { DB.cenik.push({id:uid(),...it}); neu++; }
   });
   document.getElementById('importModal').classList.remove('show');
@@ -4654,6 +4724,263 @@ function tipShow(){ const t=TIPS[tipIdx%TIPS.length]||{}; document.getElementByI
 function tipNextFn(){ tipIdx=(tipIdx+1)%TIPS.length; tipShow(); }
 function tipsSetState(s){ try{localStorage.setItem('tips_state',s);}catch(e){} const card=document.getElementById('tipsCard'), fab=document.getElementById('tipsFab'); if(card) card.style.display=(s==='card')?'':'none'; if(fab) fab.style.display=(s==='min')?'':'none'; const cb=document.getElementById('ns_tipy'); if(cb) cb.checked=(s!=='off'); if(s==='card') tipShow(); }
 function initTips(){ const n=document.getElementById('tipNext'); if(!n) return; n.onclick=tipNextFn; document.getElementById('tipMin').onclick=()=>tipsSetState('min'); document.getElementById('tipsFab').onclick=()=>tipsSetState('card'); document.getElementById('tipsOff').onclick=()=>{ tipsSetState('off'); showToast('Tipy skryté. Znovu je zapnete v Nastavení → Chování.'); }; const cb=document.getElementById('ns_tipy'); if(cb) cb.onchange=()=>tipsSetState(cb.checked?'card':'off'); let s='card'; try{ s=localStorage.getItem('tips_state')||'card'; }catch(e){} tipsSetState(s); }
+
+/* ============================================================
+   KATALOG MATERIÁLŮ (Supabase)
+   Doplňte adresu projektu a veřejný (publishable) klíč. Prázdné = katalog se nezobrazuje.
+   Publishable klíč je určený pro prohlížeč – do HTML se smí dát. Secret klíč NIKDY.
+   ============================================================ */
+const KATALOG = {
+  url: '',   // např. 'https://abcdefghijklmn.supabase.co'
+  key: ''    // např. 'sb_publishable_...'
+};
+
+function katOn(){ try{ return !!(KATALOG.url && KATALOG.key); }catch(e){ return false; } }
+async function katRpc(fn, body){
+  const r = await fetch(KATALOG.url.replace(/\/+$/,'') + '/rest/v1/rpc/' + fn, {
+    method:'POST', headers:{ 'apikey':KATALOG.key, 'Content-Type':'application/json' }, body:JSON.stringify(body)
+  });
+  if(!r.ok){ let t=''; try{ t=(await r.text()).slice(0,160); }catch(e){} throw new Error('HTTP '+r.status+(t?' – '+t:'')); }
+  return r.json();
+}
+function katChyba(e){ const m=(e&&e.message)||''; return (e instanceof TypeError || /fetch/i.test(m)) ? 'bez připojení k internetu' : m; }
+function katImg(url, cls){
+  if(!url) return '<span class="'+cls+'"></span>';
+  return '<span class="'+cls+'"><img src="'+esc(url)+'" loading="lazy" alt="" referrerpolicy="no-referrer" onerror="this.remove()"></span>';
+}
+const KAT_MJ={ks:'ks',kus:'ks',m:'m',bm:'bm',m2:'m²','m²':'m²',m3:'m³','m³':'m³',kg:'kg',t:'t',l:'l',bal:'bal',pal:'pal',kpl:'kpl',sada:'sada',par:'pár','pár':'pár',role:'role',hod:'hod'};
+function katMj(m){ const k=(m==null?'':''+m).trim().toLowerCase(); return k ? (KAT_MJ[k]||k) : 'ks'; }
+function katEanZBunky(v){
+  if(v==null || v==='') return '';
+  if(typeof v==='number') v=Math.round(v).toString();
+  const s=(''+v).trim();
+  if(/e\+?\d+$/i.test(s)) return '';            // „8,59241E+12“ – EAN zkrácený Excelem, nepoužitelný
+  const d=s.replace(/\D/g,'');
+  return /^\d{8,14}$/.test(d) ? d : '';
+}
+function fmtDatumKat(iso){ const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(iso||''); return m ? (+m[3])+'. '+(+m[2])+'. '+m[1] : (iso||''); }
+function katMaterialKey(){
+  if(LINE_KAT_ORDER.indexOf('material')>=0) return 'material';
+  const k=LINE_KAT_ORDER.find(x=>norm(KAT_LABEL[x]||'').indexOf('material')===0);
+  return k || LINE_KAT_ORDER[0] || 'ostatni';
+}
+
+/* --- párování položky katalogu s ceníkem --- */
+function katNajdiVCeniku(it){
+  if(!it) return null;
+  return DB.cenik.find(c=>c.katKod && c.katKod===it.kod)
+      || (it.ean ? DB.cenik.find(c=>c.ean && c.ean===it.ean) : null)
+      || DB.cenik.find(c=>!c.katKod && c.kod && norm(c.kod)===norm(it.kod))
+      || DB.cenik.find(c=>!c.katKod && norm(c.nazev)===norm(it.nazev))
+      || null;
+}
+function katDoCeniku(it){
+  let c=katNajdiVCeniku(it), nova=false;
+  if(c){
+    // existující položka: propojit a doplnit údaje z katalogu, vlastní název / MJ / cenu nechat
+    c.katKod=it.kod;
+    if(!c.kod) c.kod=it.kod;
+    if(!c.ean && it.ean) c.ean=it.ean;
+    if(it.foto_url) c.foto=it.foto_url;
+    if(it.skupina) c.skupina=it.skupina;
+    if(it.tema) c.tema=it.tema;
+    if(c.katCena==null && it.cena_bez_dph!=null){ c.katCena=Number(it.cena_bez_dph); c.katAkt=today(); }
+    delete c.katNeaktivni;
+  } else {
+    const cena = it.cena_bez_dph==null ? 0 : Math.round(Number(it.cena_bez_dph)*100)/100;
+    c={ id:uid(), kod:it.kod||'', kategorie:katMaterialKey(), nazev:it.nazev||'', mj:katMj(it.mj), cena, pozn:'',
+        ean:it.ean||'', foto:it.foto_url||'', skupina:it.skupina||'', tema:it.tema||'',
+        katKod:it.kod, katCena:(it.cena_bez_dph==null?null:cena), katAkt:today() };
+    DB.cenik.push(c); nova=true;
+  }
+  renderCenik(); markDirty();
+  return {c, nova};
+}
+
+/* --- výběr položek u nabídky / faktury: přepínač Můj ceník | Katalog --- */
+const KAT_SRC={nb:'cenik', fa:'cenik'}, KAT_RES={nb:[],fa:[]}, KAT_LASTQ={nb:'',fa:''}, KAT_SEQ={nb:0,fa:0}, KAT_T={};
+const KAT_MAX=40;
+function katInitPickers(){
+  ['nb','fa'].forEach(pf=>{
+    const picker=document.getElementById(pf+'Picker'), chips=document.getElementById(pf+'PickChips');
+    if(!picker || !chips || document.getElementById(pf+'KatSrc')) return;
+    const d=document.createElement('div'); d.className='kat-src'; d.id=pf+'KatSrc';
+    picker.insertBefore(d, chips);
+  });
+}
+function katSrcRender(pf){
+  const el=document.getElementById(pf+'KatSrc'); if(!el) return;
+  if(!katOn()){ el.style.display='none'; KAT_SRC[pf]='cenik'; return; }
+  el.style.display='';
+  el.innerHTML=[['cenik','📋 Můj ceník'],['katalog','🔎 Katalog materiálů']].map(s=>
+    '<button type="button" class="chip'+(KAT_SRC[pf]===s[0]?' active':'')+'" onclick="katSetSrc(\''+pf+'\',\''+s[0]+'\')">'+s[1]+'</button>').join('');
+}
+function katSetSrc(pf, s){
+  KAT_SRC[pf]=s;
+  (pf==='fa'?faPickRender:nbPickRender)();
+  const inp=document.getElementById(pf+'PickSearch'); if(inp) inp.focus();
+}
+// volá se na začátku nbPickRender / faPickRender; vrací true, pokud výběr obsluhuje katalog
+function katPickMode(pf){
+  katSrcRender(pf);
+  const inp=document.getElementById(pf+'PickSearch'), list=document.getElementById(pf+'PickList'), chips=document.getElementById(pf+'PickChips');
+  if(KAT_SRC[pf]!=='katalog' || !katOn()){
+    clearTimeout(KAT_T[pf]); KAT_SEQ[pf]++;
+    inp.placeholder='Hledat v ceníku…'; list.style.maxHeight='220px'; chips.style.display='';
+    return false;
+  }
+  inp.placeholder='Hledat v katalogu – název, značka, kód nebo EAN…';
+  chips.style.display='none'; list.style.maxHeight='400px';
+  updateIdxNote(pf+'IdxNote', pf+'Kontakt');
+  katSearch(pf, inp.value);
+  return true;
+}
+function katSearch(pf, q){
+  q=(q||'').trim();
+  const list=document.getElementById(pf+'PickList');
+  clearTimeout(KAT_T[pf]);
+  if(q.length<2){
+    KAT_SEQ[pf]++; KAT_RES[pf]=[]; KAT_LASTQ[pf]='';
+    list.innerHTML='<div class="kat-info">Napište aspoň 2 znaky. Hledá se v názvu, značce, kódu i EAN – na pořadí slov ani diakritice nezáleží (např. <i>ytong 300</i>).</div>';
+    return;
+  }
+  if(q===KAT_LASTQ[pf]){ katRenderRes(pf); return; }
+  if(!KAT_RES[pf].length) list.innerHTML='<div class="kat-info">Hledám v katalogu…</div>';
+  const seq=++KAT_SEQ[pf];
+  KAT_T[pf]=setTimeout(async()=>{
+    try{
+      const res=await katRpc('katalog_hledat', {dotaz:q, pocet:KAT_MAX});
+      if(seq!==KAT_SEQ[pf] || KAT_SRC[pf]!=='katalog') return;
+      KAT_RES[pf]=Array.isArray(res)?res:[]; KAT_LASTQ[pf]=q; katRenderRes(pf);
+    }catch(e){
+      if(seq!==KAT_SEQ[pf] || KAT_SRC[pf]!=='katalog') return;
+      KAT_RES[pf]=[]; KAT_LASTQ[pf]='';
+      list.innerHTML='<div class="kat-info err">Katalog se nepodařilo načíst ('+esc(katChyba(e))+').</div>';
+    }
+  }, 280);
+}
+function katRenderRes(pf){
+  const list=document.getElementById(pf+'PickList'), res=KAT_RES[pf]||[];
+  if(!res.length){ list.innerHTML='<div class="kat-info">V katalogu nic nenalezeno pro „'+esc(KAT_LASTQ[pf])+'“.</div>'; return; }
+  list.innerHTML=res.map((it,i)=>{
+    const c=katNajdiVCeniku(it);
+    const cena=c ? c.cena : it.cena_bez_dph;
+    const meta=[it.ean?'EAN '+esc(it.ean):'', 'kód '+esc(it.kod), esc([it.tema,it.skupina].filter(Boolean).join(' › '))].filter(Boolean).join(' · ');
+    return '<button type="button" class="pick kat-pick" onclick="katPick(\''+pf+'\','+i+')" title="'+(c?'Přidat do dokladu (položka už je v ceníku)':'Přidat do dokladu a uložit do ceníku')+'">'+
+      katImg(it.foto_url,'kat-img')+
+      '<span class="kat-main"><b>'+esc(it.nazev)+'</b><span class="kat-meta">'+meta+'</span></span>'+
+      '<span class="kat-cena"><b>'+(cena==null?'bez ceny':fmtCena(cena))+'</b><span class="small muted">za '+esc(c?c.mj:katMj(it.mj))+' bez DPH</span>'+
+        (c?'<span class="badge kat" style="margin-top:3px">v ceníku</span>':'')+'</span>'+
+    '</button>';
+  }).join('') + (res.length>=KAT_MAX?'<div class="kat-info">Zobrazeno prvních '+KAT_MAX+' výsledků – upřesněte hledání.</div>':'');
+}
+function katPick(pf, i){
+  const it=(KAT_RES[pf]||[])[i]; if(!it) return;
+  const r=katDoCeniku(it);
+  if(pf==='fa') faAddFromCenik(r.c); else nbAddFromCenik(r.c);
+  if(it.cena_bez_dph==null) showToast('„'+r.c.nazev+'“ nemá v katalogu cenu – doplňte ji v řádku.', true);
+  else if(r.nova) showToast('„'+r.c.nazev+'“ přidáno a uloženo i do ceníku.');
+  katRenderRes(pf);
+}
+
+/* --- ceník: aktualizace z katalogu --- */
+let KAT_SYNC=[];
+async function katSync(){
+  if(!katOn()) return;
+  const kand=DB.cenik.filter(c=>c.katKod || (c.ean && /^\d{8,14}$/.test(c.ean)));
+  if(!kand.length){ showToast('V ceníku zatím nejsou položky z katalogu ani položky s vyplněným EAN.', true); return; }
+  const btn=document.getElementById('btnKatSync'), t0=btn.textContent;
+  btn.disabled=true; btn.textContent='⟳ Hledám v katalogu…';
+  try{
+    const kody=[...new Set(kand.map(c=>c.katKod).filter(Boolean))];
+    const eany=[...new Set(kand.map(c=>c.ean).filter(e=>e && /^\d{8,14}$/.test(e)))];
+    const res=[];
+    for(let i=0;i<Math.max(kody.length,eany.length);i+=500){
+      const part=await katRpc('katalog_podle_kodu', {kody:kody.slice(i,i+500), eany:eany.slice(i,i+500)});
+      if(Array.isArray(part)) res.push(...part);
+    }
+    const byKod={}, byEan={};
+    res.forEach(m=>{ byKod[m.kod]=m; if(m.ean){ const p=byEan[m.ean]; if(!p || (p.neaktivni && !m.neaktivni)) byEan[m.ean]=m; } });
+    KAT_SYNC=[]; let bezShody=0;
+    kand.forEach(c=>{
+      const m=(c.katKod && byKod[c.katKod]) || (c.ean && byEan[c.ean]) || null;
+      if(!m){ if(c.katKod) KAT_SYNC.push({c, typ:'chybi'}); else bezShody++; return; }
+      if(m.neaktivni){ KAT_SYNC.push({c, m, typ:'neakt'}); return; }
+      const nova=m.cena_bez_dph==null ? null : Number(m.cena_bez_dph);
+      const cur=Number(c.cena)||0;
+      const zmena= nova!=null && Math.abs(cur-nova)>0.005;
+      const vlastni= c.katCena!=null && Math.abs(cur-Number(c.katCena))>0.005;   // cenu v ceníku uživatel upravil ručně
+      KAT_SYNC.push({c, m, typ: zmena?'cena':'ok', nova, vlastni, noveSpar:!c.katKod, sel: zmena && c.katCena!=null && !vlastni});
+    });
+    katSyncRender(bezShody);
+    document.getElementById('katSyncModal').classList.add('show');
+  }catch(e){
+    showToast('Katalog se nepodařilo načíst ('+katChyba(e)+').', true);
+  }finally{
+    btn.disabled=false; btn.textContent=t0;
+  }
+}
+function katSyncRender(bezShody){
+  const ceny=KAT_SYNC.filter(r=>r.typ==='cena'), pryc=KAT_SYNC.filter(r=>r.typ==='chybi'||r.typ==='neakt'), spar=KAT_SYNC.filter(r=>r.noveSpar && r.m && !r.m.neaktivni);
+  const n=KAT_SYNC.length+bezShody, pl=(k,a,b,c)=>k===1?a:(k>=2&&k<=4?b:c);
+  const sum=['Zkontrolováno <b>'+n+'</b> '+pl(n,'položka','položky','položek'), '<b>'+ceny.length+'</b> se změnou ceny'];
+  if(spar.length) sum.push(spar.length+' nově spárováno podle EAN');
+  if(pryc.length) sum.push(pryc.length+' už katalog nevede');
+  if(bezShody) sum.push(bezShody+' s EAN, který katalog nezná');
+  document.getElementById('katSyncSum').innerHTML=sum.join(' · ')+'.';
+  let h='';
+  if(ceny.length){
+    h+='<div class="card"><table><thead><tr><th style="width:30px"><input type="checkbox" id="katSyncAll" title="Vybrat vše"></th><th>Položka</th><th class="num">V ceníku</th><th class="num">V katalogu</th><th class="num">Rozdíl</th></tr></thead><tbody>'+
+      KAT_SYNC.map((r,i)=>{
+        if(r.typ!=='cena') return '';
+        const cur=Number(r.c.cena)||0, d=cur? (r.nova-cur)/cur*100 : 0;
+        return '<tr><td><input type="checkbox" data-kat-sel="'+i+'"'+(r.sel?' checked':'')+'></td>'+
+          '<td><div class="cen-name">'+katImg(r.m.foto_url||r.c.foto,'cen-thumb')+'<div><b>'+esc(r.c.nazev)+'</b>'+
+            (r.vlastni?' <span class="badge katoff" title="Cenu v ceníku jste dříve upravil ručně">vlastní cena</span>':'')+
+            (r.noveSpar?' <span class="badge kat">nově spárováno</span>':'')+
+            '<br><span class="small muted">'+esc([r.c.ean?'EAN '+r.c.ean:'', 'kód '+r.m.kod].filter(Boolean).join(' · '))+'</span></div></div></td>'+
+          '<td class="num">'+fmtCena(cur)+'</td><td class="num"><b>'+fmtCena(r.nova)+'</b></td>'+
+          '<td class="num '+(d>0?'kat-diff-up':'kat-diff-down')+'">'+(cur?(d>0?'+':'')+fmtNum(Math.round(d*10)/10)+' %':'—')+'</td></tr>';
+      }).join('')+'</tbody></table></div>'+
+      '<div class="small muted" style="margin:8px 2px 14px">Zaškrtnuté položky dostanou cenu z katalogu. Položky, u kterých jste cenu v ceníku upravil ručně, nejsou předvybrané.</div>';
+  } else {
+    h+='<div class="kat-info" style="padding:4px 2px 12px">Ceny v ceníku odpovídají katalogu.</div>';
+  }
+  if(pryc.length){
+    h+='<div class="small" style="font-weight:600;color:var(--warn);margin:4px 2px 6px">Tyto položky už katalog nevede – v ceníku zůstanou, jen se označí „mimo katalog“:</div>'+
+       '<div class="small muted" style="margin:0 2px 8px">'+pryc.map(r=>esc(r.c.nazev)).join(' · ')+'</div>';
+  }
+  document.getElementById('katSyncBody').innerHTML=h;
+  document.getElementById('katSyncMsg').textContent='Fotky, skupiny a EAN se doplní u všech nalezených položek.';
+  document.querySelectorAll('[data-kat-sel]').forEach(el=>el.onchange=()=>{ KAT_SYNC[+el.dataset.katSel].sel=el.checked; });
+  const all=document.getElementById('katSyncAll');
+  if(all){ all.checked=ceny.length>0 && ceny.every(r=>r.sel); all.onchange=()=>{ KAT_SYNC.forEach(r=>{ if(r.typ==='cena') r.sel=all.checked; }); document.querySelectorAll('[data-kat-sel]').forEach(el=>el.checked=all.checked); }; }
+}
+function katSyncApply(){
+  let zmen=0;
+  KAT_SYNC.forEach(r=>{
+    const c=r.c, m=r.m;
+    if(r.typ==='chybi'){ c.katNeaktivni=true; return; }
+    if(r.typ==='neakt'){ c.katKod=m.kod; c.katNeaktivni=true; return; }
+    c.katKod=m.kod;
+    if(!c.kod) c.kod=m.kod;
+    if(!c.ean && m.ean) c.ean=m.ean;
+    if(m.foto_url) c.foto=m.foto_url;
+    if(m.skupina) c.skupina=m.skupina;
+    if(m.tema) c.tema=m.tema;
+    delete c.katNeaktivni;
+    if(r.typ==='cena' && r.sel){ c.cena=Math.round(r.nova*100)/100; zmen++; }
+    if(r.nova!=null){ c.katCena=r.nova; c.katAkt=today(); }
+  });
+  document.getElementById('katSyncModal').classList.remove('show');
+  KAT_SYNC=[]; renderCenik(); markDirty();
+  showToast('Ceník aktualizován z katalogu'+(zmen?' – změněno '+zmen+(zmen===1?' cena':(zmen<5?' ceny':' cen')):'')+'.');
+}
+
+katInitPickers();
+document.getElementById('btnKatSync').onclick=katSync;
+document.getElementById('katSyncApply').onclick=katSyncApply;
+if(katOn()) TIPS.push({i:'🔎', t:'Katalog materiálů', x:'U nabídky nebo faktury klikněte na „＋ Z ceníku“ a přepněte na „Katalog materiálů“. Vybraná položka se vloží do dokladu a sama se uloží i do vašeho ceníku. Tlačítkem „Aktualizovat z katalogu“ v Ceníku pak hlídáte aktuální ceny.'});
 
 boot();
 initTips();
