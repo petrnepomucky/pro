@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FakturaPRO — nabídky, faktury a protokoly pro řemeslníky</title>
+<meta name="description" content="Chytrý offline nástroj pro řemeslníky a živnostníky. Kontakty, ceník, nabídky, faktury s QR platbou a předávací protokoly — propojené na pár kliknutí. Rozšíření o XML feed s 5 000 stavebními položkami k okamžité poptávce.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#15233c; --navy-2:#1e3357; --navy-3:#27406a;
+    --gold:#b0894e; --gold-2:#c9a468; --gold-ink:#9a742a;
+    --cream:#faf8f3; --paper:#ffffff; --ink:#232a34; --muted:#647084;
+    --line:#e7e1d4; --line-2:#eef0f3;
+    --ok:#2f7d55;
+    --shadow-sm:0 1px 2px rgba(21,35,60,.06), 0 4px 14px rgba(21,35,60,.06);
+    --shadow-md:0 10px 30px rgba(21,35,60,.12);
+    --shadow-lg:0 24px 60px rgba(21,35,60,.22);
+    --r:16px;
+    --font:"Manrope",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:var(--font);color:var(--ink);background:var(--paper);line-height:1.6;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{line-height:1.15;margin:0;letter-spacing:-.02em;color:var(--navy)}
+  h1{font-size:clamp(2rem,5vw,3.6rem);font-weight:800}
+  h2{font-size:clamp(1.6rem,3.4vw,2.6rem);font-weight:800}
+  h3{font-size:1.18rem;font-weight:700}
+  p{margin:0}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 24px}
+  .btn{display:inline-flex;align-items:center;gap:9px;border:0;border-radius:999px;padding:14px 26px;font-family:inherit;font-size:1rem;font-weight:700;cursor:pointer;transition:transform .15s ease, box-shadow .15s ease, background .15s ease;white-space:nowrap}
+  .btn.primary{background:linear-gradient(120deg,var(--gold),var(--gold-2));color:#fff;box-shadow:0 8px 22px rgba(176,137,78,.4)}
+  .btn.primary:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(176,137,78,.5)}
+  .btn.ghost{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.28)}
+  .btn.ghost:hover{background:rgba(255,255,255,.16)}
+  .btn.dark{background:var(--navy);color:#fff;box-shadow:var(--shadow-md)}
+  .btn.dark:hover{transform:translateY(-2px)}
+  .btn.lg{padding:17px 34px;font-size:1.08rem}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:.82rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-ink)}
+  .eyebrow.light{color:var(--gold-2)}
+  .muted{color:var(--muted)}
+
+  /* HEADER */
+  header.nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.82);backdrop-filter:saturate(180%) blur(12px);border-bottom:1px solid var(--line-2)}
+  .nav-in{display:flex;align-items:center;gap:18px;height:70px}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:800;color:var(--navy);font-size:1.24rem;letter-spacing:-.02em}
+  .brand .logo{flex:0 0 auto}
+  .nav-links{display:flex;gap:26px;margin-left:auto}
+  .nav-links a{font-weight:600;color:var(--navy);font-size:.98rem;opacity:.82;transition:opacity .15s}
+  .nav-links a:hover{opacity:1}
+  .nav-cta{margin-left:8px}
+  .burger{display:none;margin-left:auto;background:none;border:0;cursor:pointer;padding:8px}
+  .burger span{display:block;width:24px;height:2px;background:var(--navy);margin:5px 0;border-radius:2px;transition:.2s}
+
+  /* HERO */
+  .hero{position:relative;overflow:hidden;background:radial-gradient(1200px 600px at 78% -10%,rgba(201,164,104,.22),transparent 60%),linear-gradient(160deg,var(--navy) 0%,var(--navy-2) 55%,#182a49 100%);color:#fff}
+  .hero::after{content:"";position:absolute;right:-160px;top:-160px;width:520px;height:520px;border-radius:50%;background:radial-gradient(circle,rgba(201,164,104,.28),transparent 65%);pointer-events:none}
+  .hero-in{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center;padding:78px 0 92px}
+  .hero h1{color:#fff;margin:18px 0 0}
+  .hero h1 .hl{background:linear-gradient(120deg,var(--gold-2),#e6cfa3);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .hero .lead{margin-top:20px;font-size:1.18rem;color:#d7deea;max-width:33ch}
+  .hero-cta{display:flex;gap:14px;margin-top:32px;flex-wrap:wrap}
+  .hero-trust{display:flex;gap:22px;margin-top:30px;flex-wrap:wrap;color:#c4cddc;font-size:.92rem;font-weight:600}
+  .hero-trust span{display:flex;align-items:center;gap:8px}
+  .tick{color:var(--gold-2)}
+
+  /* HERO MOCK */
+  .mock{position:relative}
+  .win{position:relative;z-index:1;background:#fff;border-radius:14px;box-shadow:var(--shadow-lg);overflow:hidden;transform:perspective(1400px) rotateY(-9deg) rotateX(3deg);transition:transform .4s ease}
+  .mock:hover .win{transform:perspective(1400px) rotateY(-4deg) rotateX(1deg)}
+  .win-bar{display:flex;align-items:center;gap:7px;padding:11px 14px;background:#f3f4f7;border-bottom:1px solid #e7e9ee}
+  .win-bar i{width:11px;height:11px;border-radius:50%;background:#d6d9e0;display:block}
+  .win-bar i:nth-child(1){background:#f0a8a0}.win-bar i:nth-child(2){background:#f3d09a}.win-bar i:nth-child(3){background:#a7d9b4}
+  .win-tabs{display:flex;gap:4px;padding:9px 14px 0;background:#fff;border-bottom:1px solid var(--line-2);flex-wrap:wrap}
+  .win-tabs span{font-size:.72rem;font-weight:700;color:var(--muted);padding:6px 10px;border-radius:8px 8px 0 0}
+  .win-tabs span.on{background:var(--navy);color:#fff}
+  .doc{padding:20px}
+  .doc-top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--gold);padding-bottom:12px}
+  .doc-brand{display:flex;align-items:center;gap:10px}
+  .doc-brand .lg{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,var(--navy),var(--navy-3));display:flex;align-items:center;justify-content:center;color:var(--gold-2);font-weight:800;font-size:1rem}
+  .doc-name{font-weight:800;color:var(--navy);font-size:.98rem;line-height:1.1}
+  .doc-sub{font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-ink)}
+  .doc-t1{font-size:.6rem;letter-spacing:.2em;color:var(--gold-ink);text-align:right}
+  .doc-t2{font-size:1.3rem;font-weight:800;color:var(--navy);text-align:right;line-height:1}
+  .doc table{width:100%;border-collapse:collapse;margin-top:14px;font-size:.72rem}
+  .doc th{text-align:left;font-size:.56rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);border-bottom:1.5px solid var(--navy);padding:6px 4px}
+  .doc td{padding:7px 4px;border-bottom:1px solid #eee;color:#3a4256}
+  .doc td.r,.doc th.r{text-align:right}
+  .doc .cat{color:var(--gold-ink);font-weight:700}
+  .doc-bottom{display:flex;justify-content:space-between;align-items:flex-end;margin-top:14px;gap:12px}
+  .qr{width:58px;height:58px;border-radius:8px;background:
+      linear-gradient(90deg,#15233c 2px,transparent 0) 0 0/12px 12px,
+      linear-gradient(#15233c 2px,transparent 0) 0 0/12px 12px,#fff;
+      border:3px solid #15233c;opacity:.9;flex:0 0 auto}
+  .doc-total{flex:1;background:var(--navy);color:#fff;border-radius:10px;padding:11px 14px;display:flex;justify-content:space-between;align-items:center}
+  .doc-total b{font-size:1.12rem;color:#fff}
+  .doc-total .lbl{font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-2)}
+  .badge-float{position:absolute;z-index:6;background:#fff;border-radius:12px;box-shadow:var(--shadow-md);padding:11px 15px;font-weight:700;color:var(--navy);font-size:.86rem;display:flex;align-items:center;gap:9px}
+  .badge-float .ic{width:30px;height:30px;border-radius:8px;background:var(--cream);display:flex;align-items:center;justify-content:center}
+  .bf-1{left:-26px;top:34%;animation:float 5s ease-in-out infinite}
+  .bf-2{right:-20px;bottom:16%;animation:float 5s ease-in-out infinite .8s}
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+
+  /* SECTIONS */
+  section{padding:88px 0}
+  .sec-head{text-align:center;max-width:720px;margin:0 auto 54px}
+  .sec-head h2{margin-top:12px}
+  .sec-head p{margin-top:14px;font-size:1.1rem;color:var(--muted)}
+
+  /* FEATURES */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+  .card{background:#fff;border:1px solid var(--line-2);border-radius:var(--r);padding:28px;box-shadow:var(--shadow-sm);transition:transform .2s ease, box-shadow .2s ease}
+  .card:hover{transform:translateY(-4px);box-shadow:var(--shadow-md)}
+  .card .ic{width:52px;height:52px;border-radius:13px;background:linear-gradient(135deg,var(--cream),#fff);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;margin-bottom:16px;color:var(--gold-ink)}
+  .card h3{margin-bottom:8px}
+  .card p{color:var(--muted);font-size:.98rem}
+  .card .ic svg{width:26px;height:26px}
+
+  /* FLOW */
+  .flow-sec{background:linear-gradient(180deg,var(--cream),#fff)}
+  .flow{display:flex;align-items:stretch;justify-content:center;gap:0;flex-wrap:wrap}
+  .step{flex:1;min-width:180px;max-width:250px;background:#fff;border:1px solid var(--line-2);border-radius:var(--r);padding:24px;text-align:center;box-shadow:var(--shadow-sm);position:relative}
+  .step .n{width:40px;height:40px;border-radius:50%;background:var(--navy);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
+  .step h3{font-size:1.05rem}
+  .step p{color:var(--muted);font-size:.9rem;margin-top:6px}
+  .arrow{display:flex;align-items:center;justify-content:center;color:var(--gold);flex:0 0 46px;font-size:1.6rem;font-weight:800}
+  .flow-note{text-align:center;margin-top:30px;font-size:1.05rem;color:var(--navy);font-weight:600}
+  .flow-note b{color:var(--gold-ink)}
+
+  /* STATS */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:14px}
+  .stat{text-align:center;padding:18px}
+  .stat .num{font-size:2.4rem;font-weight:800;color:var(--navy);letter-spacing:-.03em}
+  .stat .lbl{color:var(--muted);font-weight:600;font-size:.94rem;margin-top:2px}
+
+  /* FEED */
+  .feed{background:radial-gradient(900px 500px at 15% 0%,rgba(201,164,104,.16),transparent 60%),linear-gradient(160deg,var(--navy),var(--navy-2));color:#fff;border-radius:28px;overflow:hidden;position:relative}
+  .feed-in{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;padding:56px}
+  .feed h2{color:#fff}
+  .feed .lead{color:#d7deea;font-size:1.1rem;margin-top:14px}
+  .feed .big{font-size:clamp(3rem,7vw,5rem);font-weight:800;line-height:1;background:linear-gradient(120deg,var(--gold-2),#efd9b1);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .feed ul{list-style:none;padding:0;margin:22px 0 0;display:grid;gap:13px}
+  .feed li{display:flex;gap:12px;align-items:flex-start;color:#e4e9f1}
+  .feed li .tick{flex:0 0 auto;margin-top:2px}
+  .feed .tag{display:inline-block;margin-top:22px;background:rgba(201,164,104,.18);border:1px solid rgba(201,164,104,.4);color:var(--gold-2);padding:8px 16px;border-radius:999px;font-weight:700;font-size:.88rem}
+  .feed-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);border-radius:18px;padding:8px;min-width:0}
+  .feed-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;transition:background .15s}
+  .feed-row+.feed-row{margin-top:4px}
+  .feed-row:hover{background:rgba(255,255,255,.07)}
+  .feed-row .pic{width:40px;height:40px;border-radius:9px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;flex:0 0 auto;color:var(--gold-2)}
+  .feed-row .t{flex:1;min-width:0}
+  .feed-row .t b{display:block;font-size:.92rem;color:#fff;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .feed-row .t span{font-size:.76rem;color:#aeb9cc}
+  .feed-row .pr{font-weight:800;color:#fff;font-size:.9rem;white-space:nowrap}
+  .feed-row .add{flex:0 0 auto;background:var(--gold);color:#fff;border:0;border-radius:8px;padding:7px 12px;font-weight:700;font-size:.78rem;cursor:pointer;font-family:inherit}
+
+  /* AUDIENCE */
+  .chips{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:10px}
+  .chip{background:#fff;border:1px solid var(--line);border-radius:999px;padding:11px 20px;font-weight:600;color:var(--navy);box-shadow:var(--shadow-sm)}
+  .chip .d{color:var(--gold);margin-right:7px}
+
+  /* CTA */
+  .cta{background:linear-gradient(120deg,var(--navy),var(--navy-3));color:#fff;border-radius:28px;text-align:center;padding:66px 32px;position:relative;overflow:hidden}
+  .cta::before{content:"";position:absolute;left:-120px;bottom:-120px;width:360px;height:360px;border-radius:50%;background:radial-gradient(circle,rgba(201,164,104,.25),transparent 65%)}
+  .cta h2{color:#fff;position:relative}
+  .cta p{color:#d7deea;margin:14px auto 0;max-width:52ch;position:relative;font-size:1.1rem}
+  .cta .btn{margin-top:30px;position:relative}
+
+  /* FOOTER */
+  footer{background:#0f1a2e;color:#93a0b7;padding:46px 0 34px;margin-top:0}
+  .foot-in{display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;align-items:center}
+  .foot-brand{display:flex;align-items:center;gap:11px;color:#fff;font-weight:800;font-size:1.15rem}
+  footer .small{font-size:.86rem}
+  footer a{color:#c4cddc}
+
+  /* reveal */
+  .reveal{opacity:0;transform:translateY(26px);transition:opacity .7s ease, transform .7s ease}
+  .reveal.in{opacity:1;transform:none}
+
+  @media (max-width:900px){
+    .hero-in{grid-template-columns:1fr;gap:44px;padding:56px 0 66px}
+    .feed-in{grid-template-columns:minmax(0,1fr);padding:40px 28px;gap:34px}
+    .grid{grid-template-columns:1fr 1fr}
+    .stats{grid-template-columns:1fr 1fr}
+    .nav-links{display:none}
+    .burger{display:block}
+    .nav-links.open{display:flex;position:absolute;top:70px;left:0;right:0;flex-direction:column;background:#fff;padding:18px 24px;gap:16px;box-shadow:var(--shadow-md);border-bottom:1px solid var(--line-2)}
+    .nav-cta{display:none}
+    .badge-float{display:none}
+  }
+  @media (max-width:560px){
+    .grid{grid-template-columns:1fr}
+    .stats{grid-template-columns:1fr 1fr}
+    .arrow{display:none}
+    .step{max-width:none}
+    section{padding:64px 0}
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<header class="nav">
+  <div class="wrap nav-in">
+    <a href="#" class="brand">
+      <svg class="logo" width="34" height="34" viewBox="0 0 34 34" fill="none" aria-hidden="true">
+        <rect width="34" height="34" rx="9" fill="#15233c"/>
+        <path d="M11 9h9l4 4v12a1 1 0 0 1-1 1H11a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1Z" stroke="#c9a468" stroke-width="1.6"/>
+        <path d="M13.5 17.5l2.2 2.2 4.8-4.8" stroke="#c9a468" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      FakturaPRO
+    </a>
+    <nav class="nav-links" id="navLinks">
+      <a href="#funkce">Funkce</a>
+      <a href="#propojeni">Jak to funguje</a>
+      <a href="#feed">Ceník &amp; feed</a>
+      <a href="#prokoho">Pro koho</a>
+    </nav>
+    <a href="https://pro.yey.cz/fakturapro.html" class="btn primary nav-cta">Vyzkoušet</a>
+    <button class="burger" id="burger" aria-label="Menu"><span></span><span></span><span></span></button>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="wrap hero-in">
+    <div class="hero-copy">
+      <span class="eyebrow light">★ TOP nástroj pro řemeslníky a podnikatele</span>
+      <h1>Nabídky, faktury a protokoly. <span class="hl">Všechno propojené.</span></h1>
+      <p class="lead">Jeden chytrý nástroj od poptávky až po předání díla. Bez měsíčních poplatků, funguje offline a data máte pořád u sebe.</p>
+      <div class="hero-cta">
+        <a href="https://pro.yey.cz/fakturapro.html" class="btn primary lg">Vyzkoušet aplikaci</a>
+        <a href="#propojeni" class="btn ghost lg">Jak to funguje →</a>
+      </div>
+      <div class="hero-trust">
+        <span><span class="tick">✓</span> Funguje offline</span>
+        <span><span class="tick">✓</span> QR platba na faktuře</span>
+        <span><span class="tick">✓</span> Bez cloudu a předplatného dat</span>
+      </div>
+    </div>
+
+    <div class="mock">
+      <div class="badge-float bf-1"><span class="ic">⚡</span> Nabídka → faktura<br>jedním klikem</div>
+      <div class="badge-float bf-2"><span class="ic">📱</span> QR platba</div>
+      <div class="win">
+        <div class="win-bar"><i></i><i></i><i></i></div>
+        <div class="win-tabs"><span>Kontakty</span><span>Ceník</span><span>Nabídky</span><span class="on">Faktury</span><span>Protokoly</span></div>
+        <div class="doc">
+          <div class="doc-top">
+            <div class="doc-brand">
+              <div class="lg">VF</div>
+              <div><div class="doc-name">Vaše firma</div><div class="doc-sub">Instalace · montáže</div></div>
+            </div>
+            <div><div class="doc-t1">Faktura</div><div class="doc-t2">2600042</div></div>
+          </div>
+          <table>
+            <thead><tr><th>Předmět</th><th class="r">Množ.</th><th class="r">Cena</th></tr></thead>
+            <tbody>
+              <tr><td class="cat">Práce</td><td class="r">1</td><td class="r">28 600</td></tr>
+              <tr><td class="cat">Materiál</td><td class="r">1</td><td class="r">32 600</td></tr>
+              <tr><td class="cat">Doprava</td><td class="r">1</td><td class="r">1 200</td></tr>
+            </tbody>
+          </table>
+          <div class="doc-bottom">
+            <div class="qr" aria-hidden="true"></div>
+            <div class="doc-total"><span class="lbl">Celkem k úhradě</span><b>62&nbsp;400 Kč</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="funkce">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Co všechno umí</span>
+      <h2>Celá zakázka v jednom nástroji</h2>
+      <p>Od prvního kontaktu se zákazníkem až po předávací protokol. Žádné přepisování mezi Wordem, Excelem a e-mailem.</p>
+    </div>
+    <div class="grid">
+      <div class="card reveal">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg></div>
+        <h3>Kontakty s ARES</h3>
+        <p>Zadáte IČO a název, adresa i DIČ se doplní z rejstříku samy. Zákazníky máte přehledně na jednom místě.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 6h18M3 12h18M3 18h18"/><circle cx="7" cy="6" r="1.4" fill="currentColor"/><circle cx="11" cy="12" r="1.4" fill="currentColor"/><circle cx="9" cy="18" r="1.4" fill="currentColor"/></svg></div>
+        <h3>Chytrý ceník</h3>
+        <p>Vlastní kategorie, hlídání cen a import z Excelu — stovky položek naráz. Kategorie se při importu vytvoří samy.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h5"/></svg></div>
+        <h3>Nabídky</h3>
+        <p>Položky přehledně po kategoriích s mezisoučty. Vložíte je i rovnou z tabulky. Zákazník dostane profesionální nabídku.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M8 15h4"/></svg></div>
+        <h3>Faktury s QR platbou</h3>
+        <p>Běžná faktura, neplátce i přenesená daňová povinnost (§92e). QR kód pro platbu se vygeneruje automaticky.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+        <h3>Předávací protokoly</h3>
+        <p>Z faktury vytvoříte protokol o předání díla jedním kliknutím. Ideální k převzetí zakázky zákazníkem.</p>
+      </div>
+      <div class="card reveal">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18M3 12h18"/></svg></div>
+        <h3>Vaše značka</h3>
+        <p>Vlastní logo, barvy, písmo i text u loga. Nástroj sladíte se svou firmou — ne naopak.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROPOJENÍ / FLOW -->
+<section id="propojeni" class="flow-sec">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Provázané funkce</span>
+      <h2>Jednou zadáte, dál to jede samo</h2>
+      <p>Data si funkce předávají mezi sebou. Z kontaktu vznikne nabídka, z nabídky faktura, z faktury protokol — a nic nepřepisujete.</p>
+    </div>
+    <div class="flow reveal">
+      <div class="step">
+        <div class="n">1</div>
+        <h3>Kontakt</h3>
+        <p>Zákazník podle IČO z rejstříku ARES.</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="n">2</div>
+        <h3>Nabídka</h3>
+        <p>Položky z ceníku po kategoriích s mezisoučty.</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="n">3</div>
+        <h3>Faktura</h3>
+        <p>Jedním klikem z nabídky. QR platba, správné DPH.</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="step">
+        <div class="n">4</div>
+        <h3>Protokol</h3>
+        <p>Předání díla z hotové faktury.</p>
+      </div>
+    </div>
+    <p class="flow-note reveal">Celá cesta od poptávky k předání — <b>na pár kliknutí</b>, bez ručního opisování.</p>
+  </div>
+</section>
+
+<!-- STATS -->
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="stats reveal">
+      <div class="stat"><div class="num">5 000+</div><div class="lbl">položek ve stavebním feedu</div></div>
+      <div class="stat"><div class="num">1 klik</div><div class="lbl">z nabídky na fakturu</div></div>
+      <div class="stat"><div class="num">0 Kč</div><div class="lbl">měsíčně za data</div></div>
+      <div class="stat"><div class="num">100%</div><div class="lbl">offline a u vás</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- FEED -->
+<section id="feed">
+  <div class="wrap">
+    <div class="feed reveal">
+      <div class="feed-in">
+        <div>
+          <span class="eyebrow light">Rozšíření ceníku</span>
+          <div class="big">5 000+</div>
+          <h2 style="margin-top:6px">stavebních položek<br>přímo k poptání</h2>
+          <p class="lead">Připojte XML feed a získáte tisíce položek s cenami rovnou do ceníku. Vyhledáte, vložíte do nabídky nebo faktury — a můžete je <b style="color:#fff">rovnou poptat u dodavatele</b>.</p>
+          <ul>
+            <li><span class="tick">✓</span> Aktuální ceny bez ručního přepisování</li>
+            <li><span class="tick">✓</span> Vyhledání a vložení do dokladu na pár kliků</li>
+            <li><span class="tick">✓</span> Poptávka k dodavateli přímo z aplikace</li>
+          </ul>
+          <span class="tag">Zatím stavební obor — další obory připravujeme</span>
+        </div>
+        <div class="feed-card" aria-hidden="true">
+          <div class="feed-row"><div class="pic">🧱</div><div class="t"><b>Ytong přesná tvárnice 150</b><span>skladem · ks</span></div><div class="pr">89 Kč</div><button class="add">Poptat</button></div>
+          <div class="feed-row"><div class="pic">🔩</div><div class="t"><b>Sádrokarton RB 12,5 mm</b><span>skladem · m²</span></div><div class="pr">129 Kč</div><button class="add">Poptat</button></div>
+          <div class="feed-row"><div class="pic">🪵</div><div class="t"><b>OSB 3 deska 18 mm</b><span>skladem · m²</span></div><div class="pr">315 Kč</div><button class="add">Poptat</button></div>
+          <div class="feed-row"><div class="pic">🧰</div><div class="t"><b>Lepidlo flexibilní C2TE 25 kg</b><span>skladem · pytel</span></div><div class="pr">349 Kč</div><button class="add">Poptat</button></div>
+          <div class="feed-row"><div class="pic">🚿</div><div class="t"><b>PPR trubka 32×5,4</b><span>skladem · m</span></div><div class="pr">85 Kč</div><button class="add">Poptat</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SIMPLICITY -->
+<section style="background:linear-gradient(180deg,#fff,var(--cream))">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Jednoduše</span>
+      <h2>Zvládne to každý — za pár minut</h2>
+      <p>Žádné instalace, žádné školení. Otevřete v prohlížeči a rovnou fakturujete.</p>
+    </div>
+    <div class="grid">
+      <div class="card reveal" style="text-align:center">
+        <div class="ic" style="margin:0 auto 16px">📂</div>
+        <h3>1 · Otevřete</h3>
+        <p>Spustíte jeden soubor v prohlížeči a připojíte pracovní složku (klidně v OneDrivu).</p>
+      </div>
+      <div class="card reveal" style="text-align:center">
+        <div class="ic" style="margin:0 auto 16px">✍️</div>
+        <h3>2 · Vyplníte</h3>
+        <p>Vyberete zákazníka a položky z ceníku. Součty i DPH se spočítají samy.</p>
+      </div>
+      <div class="card reveal" style="text-align:center">
+        <div class="ic" style="margin:0 auto 16px">🖨️</div>
+        <h3>3 · Odešlete</h3>
+        <p>Vytisknete do PDF nebo pošlete. Data se ukládají průběžně a nikdy se neztratí.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- AUDIENCE -->
+<section id="prokoho">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">Pro koho</span>
+      <h2>Dělané pro řemeslníky a živnostníky</h2>
+      <p>Ať děláte cokoli — nástroj si přizpůsobíte svému oboru, kategoriím i ceníku.</p>
+    </div>
+    <div class="chips reveal">
+      <span class="chip"><span class="d">●</span>Instalatéři</span>
+      <span class="chip"><span class="d">●</span>Topenáři</span>
+      <span class="chip"><span class="d">●</span>Plynaři</span>
+      <span class="chip"><span class="d">●</span>Elektrikáři</span>
+      <span class="chip"><span class="d">●</span>Zedníci</span>
+      <span class="chip"><span class="d">●</span>Obkladači</span>
+      <span class="chip"><span class="d">●</span>Podlaháři</span>
+      <span class="chip"><span class="d">●</span>Malíři</span>
+      <span class="chip"><span class="d">●</span>Truhláři</span>
+      <span class="chip"><span class="d">●</span>Stavební firmy</span>
+      <span class="chip"><span class="d">●</span>…a další podnikatelé</span>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section id="cta">
+  <div class="wrap">
+    <div class="cta reveal">
+      <h2>Začněte fakturovat chytře</h2>
+      <p>Vyzkoušejte nástroj, který spojí nabídky, faktury i protokoly do jednoho a ušetří vám hodiny administrativy každý týden.</p>
+      <a href="#" class="btn primary lg">Chci vyzkoušet FakturaPRO</a>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap foot-in">
+    <div class="foot-brand">
+      <svg width="30" height="30" viewBox="0 0 34 34" fill="none" aria-hidden="true">
+        <rect width="34" height="34" rx="9" fill="#1e3357"/>
+        <path d="M11 9h9l4 4v12a1 1 0 0 1-1 1H11a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1Z" stroke="#c9a468" stroke-width="1.6"/>
+        <path d="M13.5 17.5l2.2 2.2 4.8-4.8" stroke="#c9a468" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      FakturaPRO
+    </div>
+    <div class="small">© <span id="year"></span> FakturaPRO · Nabídky, faktury a protokoly pro řemeslníky · <a href="#funkce">Funkce</a> · <a href="#feed">Ceník &amp; feed</a></div>
+  </div>
+</footer>
+
+<script>
+  // rok
+  document.getElementById('year').textContent=new Date().getFullYear();
+  // mobilní menu
+  var burger=document.getElementById('burger'), nl=document.getElementById('navLinks');
+  burger.addEventListener('click',function(){ nl.classList.toggle('open'); });
+  nl.addEventListener('click',function(e){ if(e.target.tagName==='A') nl.classList.remove('open'); });
+  // scroll reveal
+  var io=new IntersectionObserver(function(es){ es.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target);} }); },{threshold:.12});
+  document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+</script>
+</body>
+</html>
