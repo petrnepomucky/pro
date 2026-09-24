@@ -696,6 +696,14 @@
         <div class="field full"><label>Adresa projektu (Project URL)</label><input id="ns_katUrl" placeholder="https://abcdefghijklmn.supabase.co" autocomplete="off" spellcheck="false"></div>
         <div class="field full"><label>Publishable klíč</label><input id="ns_katKey" placeholder="sb_publishable_…" autocomplete="off" spellcheck="false" style="font-family:monospace;font-size:12.5px"></div>
       </div>
+      <div class="field full" style="margin-top:12px"><label>Kategorie pro položky z katalogu</label>
+        <select id="ns_katKatMode">
+          <option value="tema">Podle tématu – např. „Zdivo, stropy, komíny“ (doporučeno)</option>
+          <option value="skupina">Podle skupiny – podrobněji, např. „Keramické zdivo a stropy“</option>
+          <option value="material">Vše do jedné kategorie „Materiál“</option>
+        </select>
+        <div class="small muted" style="margin-top:4px">Chybějící kategorie se vytvoří automaticky při přidání položky do ceníku. Na nabídkách se podle nich položky seskupují.</div>
+      </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
         <button class="btn gold sm" id="ns_katTest" type="button">Uložit a otestovat připojení</button>
         <button class="btn ghost sm" id="ns_katClear" type="button">Odpojit</button>
@@ -3881,7 +3889,7 @@ function nbAddEmpty(){ NB.polozky.push({nazev:'',mj:'ks',mnozstvi:1,cena:0,sleva
 function nbDelRow(i){ NB.polozky.splice(i,1); renderNbItems(); }
 
 let nbPickKat='', faPickKat='';
-function pickChips(active,fn){ const cats=[['','Vše'],['material','Materiál'],['prace','Práce'],['doprava','Doprava'],['rezie','Režie'],['ostatni','Ostatní']]; return cats.map(c=>'<button type="button" class="chip'+(active===c[0]?' active':'')+'" onclick="'+fn+'(\''+c[0]+'\')">'+c[1]+'</button>').join(''); }
+function pickChips(active,fn){ const used={}; (DB.cenik||[]).forEach(c=>used[c.kategorie]=1); const cats=[['','Vše']].concat(LINE_KAT_ORDER.filter(k=>used[k]||k===active).map(k=>[k,esc(KAT_LABEL[k]||k)])); return cats.map(c=>'<button type="button" class="chip'+(active===c[0]?' active':'')+'" onclick="'+fn+'(\''+c[0]+'\')">'+c[1]+'</button>').join(''); }
 function setNbPickKat(k){ nbPickKat=k; nbPickRender(); }
 function setFaPickKat(k){ faPickKat=k; faPickRender(); }
 function nbPickRender(){
@@ -4757,9 +4765,9 @@ function initTips(){ const n=document.getElementById('tipNext'); if(!n) return; 
    Publishable klíč je určený pro prohlížeč – do HTML se smí dát. Secret klíč NIKDY.
    ============================================================ */
 const KATALOG = {
-  url: '',   // např. 'https://abcdefghijklmn.supabase.co'
-  key: ''    // např. 'sb_publishable_...'
-};
+  url: 'https://hkzhjoveiqadezmvksdz.supabase.co',        // projekt YeY – Kancelář pro řemeslníky
+  key: 'sb_publishable_WUy9urfE9n5O2SelitV6FA_mhzCUrM_'   // publishable klíč (veřejný, smí být v HTML)
+};                                                         // hodnoty z Nastavení → Katalog materiálů mají přednost
 
 function katCfg(){
   let n={}; try{ n=(DB && DB.nastaveni && DB.nastaveni.katalog) || {}; }catch(e){}
@@ -4793,6 +4801,7 @@ function katNsRender(){
   const n=(DB.nastaveni&&DB.nastaveni.katalog)||{};
   const c=katCfg();
   setVal('ns_katUrl', n.url||c.url||''); setVal('ns_katKey', n.key||c.key||'');
+  setVal('ns_katKatMode', katKatMode());
   const m=document.getElementById('ns_katMsg');
   if(m){ m.style.color= katOn()?'var(--ok)':'var(--muted)'; m.textContent= katOn()?'Nastaveno.':'Nepřipojeno.'; }
 }
@@ -4837,6 +4846,22 @@ function katMaterialKey(){
   return k || LINE_KAT_ORDER[0] || 'ostatni';
 }
 
+/* --- kategorie z katalogu (téma / skupina) --- */
+function katKatMode(){ const m=DB && DB.nastaveni && DB.nastaveni.katalogKat; return (m==='skupina'||m==='material') ? m : 'tema'; }
+function katNazevKategorie(src){ const m=katKatMode(); if(m==='material') return ''; return ((m==='skupina' ? src.skupina : src.tema)||'').trim(); }
+function katKategorie(src){
+  const label=katNazevKategorie(src);
+  if(!label || /^nezařazen/i.test(label)) return katMaterialKey();
+  katEnsure();
+  const ex=DB.nastaveni.kategorie.find(c=>norm(c.label)===norm(label));
+  if(ex) return ex.key;
+  let key=('k_'+norm(label).replace(/[^a-z0-9]+/g,'_')).replace(/_+$/,'').slice(0,28);
+  while(DB.nastaveni.kategorie.some(c=>c.key===key)) key=key.slice(0,24)+'_'+Math.random().toString(36).slice(2,5);
+  DB.nastaveni.kategorie.push({key, label});
+  rebuildKats(); markDirty();
+  return key;
+}
+
 /* --- párování položky katalogu s ceníkem --- */
 function katNajdiVCeniku(it){
   if(!it) return null;
@@ -4860,7 +4885,7 @@ function katDoCeniku(it){
     delete c.katNeaktivni;
   } else {
     const cena = it.cena_bez_dph==null ? 0 : Math.round(Number(it.cena_bez_dph)*100)/100;
-    c={ id:uid(), kod:it.kod||'', kategorie:katMaterialKey(), nazev:it.nazev||'', mj:katMj(it.mj), cena, pozn:'',
+    c={ id:uid(), kod:it.kod||'', kategorie:katKategorie(it), nazev:it.nazev||'', mj:katMj(it.mj), cena, pozn:'',
         ean:it.ean||'', foto:it.foto_url||'', skupina:it.skupina||'', tema:it.tema||'',
         katKod:it.kod, katCena:(it.cena_bez_dph==null?null:cena), katAkt:today() };
     DB.cenik.push(c); nova=true;
@@ -4961,7 +4986,7 @@ function katPick(pf, i){
 }
 
 /* --- ceník: aktualizace z katalogu --- */
-let KAT_SYNC=[];
+let KAT_SYNC=[], KAT_PRERAD=[];
 async function katSync(){
   if(!katOn()){ if(confirm('Katalog materiálů zatím není připojený. Otevřít nastavení katalogu?')) katOtevriNastaveni(); return; }
   const kand=DB.cenik.filter(c=>c.katKod || (c.ean && /^\d{8,14}$/.test(c.ean)));
@@ -5027,6 +5052,14 @@ function katSyncRender(bezShody){
     h+='<div class="small" style="font-weight:600;color:var(--warn);margin:4px 2px 6px">Tyto položky už katalog nevede – v ceníku zůstanou, jen se označí „mimo katalog“:</div>'+
        '<div class="small muted" style="margin:0 2px 8px">'+pryc.map(r=>esc(r.c.nazev)).join(' · ')+'</div>';
   }
+  const mat=katMaterialKey();
+  KAT_PRERAD=KAT_SYNC.filter(r=>r.m && !r.m.neaktivni && r.c.kategorie===mat && katNazevKategorie(r.m) && !/^nezařazen/i.test(katNazevKategorie(r.m)));
+  if(KAT_PRERAD.length){
+    const nazvy=[...new Set(KAT_PRERAD.map(r=>katNazevKategorie(r.m)))];
+    h+='<label style="display:flex;gap:10px;align-items:flex-start;margin:10px 2px 0;cursor:pointer" class="small"><input type="checkbox" id="katSyncKat" checked style="margin-top:2px">'+
+       '<span><b>Zařadit '+KAT_PRERAD.length+' '+(KAT_PRERAD.length===1?'položku':(KAT_PRERAD.length<5?'položky':'položek'))+' z „'+esc(KAT_LABEL[mat]||'Materiál')+'“ do kategorií podle katalogu</b><br>'+
+       '<span class="muted">'+esc(nazvy.slice(0,8).join(' · '))+(nazvy.length>8?' …':'')+'</span></span></label>';
+  }
   document.getElementById('katSyncBody').innerHTML=h;
   document.getElementById('katSyncMsg').textContent='Fotky, skupiny a EAN se doplní u všech nalezených položek.';
   document.querySelectorAll('[data-kat-sel]').forEach(el=>el.onchange=()=>{ KAT_SYNC[+el.dataset.katSel].sel=el.checked; });
@@ -5034,7 +5067,10 @@ function katSyncRender(bezShody){
   if(all){ all.checked=ceny.length>0 && ceny.every(r=>r.sel); all.onchange=()=>{ KAT_SYNC.forEach(r=>{ if(r.typ==='cena') r.sel=all.checked; }); document.querySelectorAll('[data-kat-sel]').forEach(el=>el.checked=all.checked); }; }
 }
 function katSyncApply(){
-  let zmen=0;
+  let zmen=0, prerazeno=0;
+  const chk=document.getElementById('katSyncKat');
+  if(chk && chk.checked) KAT_PRERAD.forEach(r=>{ const k=katKategorie(r.m); if(k!==r.c.kategorie){ r.c.kategorie=k; prerazeno++; } });
+  KAT_PRERAD=[];
   KAT_SYNC.forEach(r=>{
     const c=r.c, m=r.m;
     if(r.typ==='chybi'){ c.katNeaktivni=true; return; }
@@ -5051,7 +5087,7 @@ function katSyncApply(){
   });
   document.getElementById('katSyncModal').classList.remove('show');
   KAT_SYNC=[]; renderCenik(); markDirty();
-  showToast('Ceník aktualizován z katalogu'+(zmen?' – změněno '+zmen+(zmen===1?' cena':(zmen<5?' ceny':' cen')):'')+'.');
+  showToast('Ceník aktualizován z katalogu'+(zmen?' – změněno '+zmen+(zmen===1?' cena':(zmen<5?' ceny':' cen')):'')+(prerazeno?', do kategorií zařazeno '+prerazeno:'')+'.');
 }
 
 katInitPickers();
@@ -5064,6 +5100,7 @@ document.getElementById('btnKatBrowse').onclick=()=>{
 };
 document.getElementById('cnPickSearch').oninput=e=>{ if(katOn()) katSearch('cn', e.target.value); };
 document.getElementById('ns_katTest').onclick=katNsTest;
+document.getElementById('ns_katKatMode').onchange=e=>{ DB.nastaveni.katalogKat=e.target.value; markDirty(); showToast('Uloženo – platí pro další položky přidané z katalogu.'); };
 document.getElementById('ns_katClear').onclick=katNsClear;
 document.querySelector('nav.tabs button[data-tab=nastaveni]').addEventListener('click', ()=>setTimeout(katNsRender,0));
 document.getElementById('katSyncApply').onclick=katSyncApply;
