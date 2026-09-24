@@ -392,7 +392,8 @@
         <option value="ostatni">Ostatní</option>
       </select>
       <input class="search" id="cenikSearch" placeholder="Hledat položku, kód, EAN…">
-      <button class="btn" id="btnKatSync" style="display:none" title="Dohledá položky ceníku v katalogu materiálů (podle kódu a EAN) a nabídne aktuální ceny">⟳ Aktualizovat z katalogu</button>
+      <button class="btn" id="btnKatBrowse" title="Vyhledat materiál v katalogu a přidat ho do ceníku">🔎 Katalog materiálů</button>
+      <button class="btn" id="btnKatSync" title="Dohledá položky ceníku v katalogu materiálů (podle kódu a EAN) a nabídne aktuální ceny">⟳ Aktualizovat z katalogu</button>
       <button class="btn" id="btnImportCenik">⬆ Import z Excelu</button>
       <button class="btn gold" id="btnAddCenik">+ Nová položka</button>
     </div>
@@ -688,6 +689,19 @@
       <label style="display:flex;gap:10px;align-items:flex-start;margin-top:10px;cursor:pointer"><input type="checkbox" id="ns_hlidatCeny" style="margin-top:3px"> <span><b>Hlídat konzistenci cen</b> — když stejnému zákazníkovi přidáváte položku, kterou už dříve dostal, nabídne se dřívější cena, ať stejná věc není jednou dráž a podruhé levněji.</span></label>
       <label style="display:flex;gap:10px;align-items:flex-start;margin-top:10px;cursor:pointer"><input type="checkbox" id="ns_tipy" style="margin-top:3px"> <span><b>Zobrazovat postranní tipy a nápovědu</b> — malý panel v rohu s radami, jak aplikaci využít naplno. Kdykoli ho lze skrýt.</span></label>
     </div>
+    <div class="card" style="padding:18px;margin-bottom:16px" id="ns_katCard">
+      <b style="color:var(--navy);font-size:16px">🔎 Katalog materiálů</b>
+      <div class="small muted" style="margin:4px 0 14px">Připojení ke katalogu v Supabase. Adresu projektu najdete v Supabase → <b>Project Settings → Data API</b> (Project URL), klíč v <b>Project Settings → API Keys → Publishable key</b> (začíná <span class="kbd">sb_publishable_</span>). Secret klíč sem nepatří.</div>
+      <div class="grid">
+        <div class="field full"><label>Adresa projektu (Project URL)</label><input id="ns_katUrl" placeholder="https://abcdefghijklmn.supabase.co" autocomplete="off" spellcheck="false"></div>
+        <div class="field full"><label>Publishable klíč</label><input id="ns_katKey" placeholder="sb_publishable_…" autocomplete="off" spellcheck="false" style="font-family:monospace;font-size:12.5px"></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px">
+        <button class="btn gold sm" id="ns_katTest" type="button">Uložit a otestovat připojení</button>
+        <button class="btn ghost sm" id="ns_katClear" type="button">Odpojit</button>
+        <span class="small" id="ns_katMsg"></span>
+      </div>
+    </div>
     <div class="card" style="padding:18px">
       <b style="color:var(--navy);font-size:16px">Číselné řady</b>
       <div class="small muted" style="margin:4px 0 14px">Nastav si tvar čísel podle svého účetnictví. Značky: <span class="kbd">{RRRR}</span> rok (2026), <span class="kbd">{RR}</span> rok (26), <span class="kbd">{MM}</span> měsíc, <span class="kbd">{NNNN}</span> pořadí (počet písmen N = počet míst, doplní se nulami). „Další číslo" je pořadí příštího dokladu.</div>
@@ -853,6 +867,19 @@
       <button class="btn" id="impApply2" type="button" style="display:none">Nahradit celý ceník</button>
       <button class="btn gold" id="impApply" type="button" style="display:none">Přidat k ceníku</button>
     </div>
+  </div>
+</div>
+
+<!-- ===== KATALOG MATERIÁLŮ (z Ceníku) ===== -->
+<div class="backdrop" id="katBrowseModal">
+  <div class="modal" style="max-width:820px">
+    <div class="modal-head"><h3>Katalog materiálů</h3><button class="x" data-close>×</button></div>
+    <div class="modal-body">
+      <p class="small muted" style="margin-top:0">Klikněte na položku a uloží se do vašeho ceníku (s fotkou, EAN a vazbou na katalog). Pak ji najdete v nabídkách i fakturách pod „＋ Z ceníku“.</p>
+      <input class="search" id="cnPickSearch" placeholder="Hledat v katalogu – název, značka, kód nebo EAN…" style="width:100%" autocomplete="off">
+      <div id="cnPickList" style="margin-top:10px;max-height:460px;overflow:auto"></div>
+    </div>
+    <div class="modal-foot"><span class="msg" id="cnPickMsg"></span><button class="btn gold" data-close>Hotovo</button></div>
   </div>
 </div>
 
@@ -3574,7 +3601,6 @@ function renderCenik(){
   const body=document.getElementById('cenikBody');
   document.getElementById('cenikCount').textContent=DB.cenik.length+' položek';
   document.getElementById('cenikEmpty').style.display=DB.cenik.length?'none':'block';
-  const _sync=document.getElementById('btnKatSync'); if(_sync) _sync.style.display=(typeof katOn==='function'&&katOn())?'':'none';
   const katMeta=c=>{
     const bits=[];
     if(c.ean) bits.push('EAN '+esc(c.ean));
@@ -4731,17 +4757,63 @@ function initTips(){ const n=document.getElementById('tipNext'); if(!n) return; 
    Publishable klíč je určený pro prohlížeč – do HTML se smí dát. Secret klíč NIKDY.
    ============================================================ */
 const KATALOG = {
-  url: '',   // např. 'https://fvrpuddkarujfttoaavb.supabase.co'
-  key: ''    // např. 'sb_publishable_1Y5nEfLwKmJxlnbkLmZgMg_Rzs7WQQG'
+  url: '',   // např. 'https://abcdefghijklmn.supabase.co'
+  key: ''    // např. 'sb_publishable_...'
 };
 
-function katOn(){ try{ return !!(KATALOG.url && KATALOG.key); }catch(e){ return false; } }
+function katCfg(){
+  let n={}; try{ n=(DB && DB.nastaveni && DB.nastaveni.katalog) || {}; }catch(e){}
+  let k={}; try{ k=KATALOG; }catch(e){}
+  return { url:(n.url||k.url||'').trim(), key:(n.key||k.key||'').trim() };
+}
+function katOn(){ const c=katCfg(); return !!(c.url && c.key); }
 async function katRpc(fn, body){
-  const r = await fetch(KATALOG.url.replace(/\/+$/,'') + '/rest/v1/rpc/' + fn, {
-    method:'POST', headers:{ 'apikey':KATALOG.key, 'Content-Type':'application/json' }, body:JSON.stringify(body)
+  const c=katCfg();
+  const r = await fetch(c.url.replace(/\/+$/,'') + '/rest/v1/rpc/' + fn, {
+    method:'POST', headers:{ 'apikey':c.key, 'Content-Type':'application/json' }, body:JSON.stringify(body)
   });
-  if(!r.ok){ let t=''; try{ t=(await r.text()).slice(0,160); }catch(e){} throw new Error('HTTP '+r.status+(t?' – '+t:'')); }
+  if(!r.ok){
+    let t=''; try{ t=(await r.text()).slice(0,160); }catch(e){}
+    if(r.status===401 || r.status===403) throw new Error('Supabase odmítl klíč – zkontrolujte publishable klíč v Nastavení');
+    if(r.status===404) throw new Error('v Supabase chybí funkce katalogu – spusťte katalog_verejne_api.sql a katalog_foto.sql');
+    throw new Error('HTTP '+r.status+(t?' – '+t:''));
+  }
   return r.json();
+}
+function katNeniNastaven(){
+  return '<div class="kat-info">Katalog materiálů zatím není připojený. Vyplňte adresu projektu a klíč v Nastavení.'+
+    '<div style="margin-top:8px"><button type="button" class="btn sm gold" onclick="katOtevriNastaveni()">Otevřít nastavení katalogu</button></div></div>';
+}
+function katOtevriNastaveni(){
+  document.querySelectorAll('.backdrop.show').forEach(b=>b.classList.remove('show'));
+  const t=document.querySelector('nav.tabs button[data-tab=nastaveni]'); if(t) t.click();
+  setTimeout(()=>{ const c=document.getElementById('ns_katCard'); if(c){ c.scrollIntoView({behavior:'smooth',block:'center'}); const u=document.getElementById('ns_katUrl'); if(u) u.focus(); } },80);
+}
+function katNsRender(){
+  const n=(DB.nastaveni&&DB.nastaveni.katalog)||{};
+  const c=katCfg();
+  setVal('ns_katUrl', n.url||c.url||''); setVal('ns_katKey', n.key||c.key||'');
+  const m=document.getElementById('ns_katMsg');
+  if(m){ m.style.color= katOn()?'var(--ok)':'var(--muted)'; m.textContent= katOn()?'Nastaveno.':'Nepřipojeno.'; }
+}
+async function katNsTest(){
+  let url=val('ns_katUrl').trim().replace(/\/+$/,'').replace(/\/rest\/v1.*$/,'');
+  const key=val('ns_katKey').trim();
+  const m=document.getElementById('ns_katMsg'); const say=(t,ok)=>{ m.textContent=t; m.style.color= ok===true?'var(--ok)':(ok===false?'var(--err)':'var(--muted)'); };
+  if(!url || !key){ say('Vyplňte adresu i klíč.', false); return; }
+  if(!/^https?:\/\/[^\s/]+/.test(url)){ say('Adresa má tvar https://….supabase.co', false); return; }
+  if(/^sb_secret_/.test(key) || /service_role/.test(key)){ say('Tohle je tajný (secret) klíč – do aplikace patří publishable klíč (sb_publishable_…).', false); return; }
+  DB.nastaveni.katalog={url, key}; setVal('ns_katUrl', url); markDirty();
+  say('Ověřuji připojení…');
+  try{
+    const r=await katRpc('katalog_hledat', {dotaz:'cihla', pocet:3});
+    say('✓ Připojeno – katalog odpovídá'+(Array.isArray(r)&&r.length?' (např. „'+r[0].nazev+'“)':'')+'.', true);
+  }catch(e){ say('Uloženo, ale připojení selhalo: '+katChyba(e)+'.', false); }
+  renderCenik();
+}
+function katNsClear(){
+  if(!confirm('Odpojit katalog materiálů? Položky, které už máte v ceníku, zůstanou.')) return;
+  DB.nastaveni.katalog={url:'', key:''}; markDirty(); katNsRender(); renderCenik();
 }
 function katChyba(e){ const m=(e&&e.message)||''; return (e instanceof TypeError || /fetch/i.test(m)) ? 'bez připojení k internetu' : m; }
 function katImg(url, cls){
@@ -4798,7 +4870,7 @@ function katDoCeniku(it){
 }
 
 /* --- výběr položek u nabídky / faktury: přepínač Můj ceník | Katalog --- */
-const KAT_SRC={nb:'cenik', fa:'cenik'}, KAT_RES={nb:[],fa:[]}, KAT_LASTQ={nb:'',fa:''}, KAT_SEQ={nb:0,fa:0}, KAT_T={};
+const KAT_SRC={nb:'cenik', fa:'cenik', cn:'katalog'}, KAT_RES={nb:[],fa:[],cn:[]}, KAT_LASTQ={nb:'',fa:'',cn:''}, KAT_SEQ={nb:0,fa:0,cn:0}, KAT_T={};
 const KAT_MAX=40;
 function katInitPickers(){
   ['nb','fa'].forEach(pf=>{
@@ -4810,7 +4882,6 @@ function katInitPickers(){
 }
 function katSrcRender(pf){
   const el=document.getElementById(pf+'KatSrc'); if(!el) return;
-  if(!katOn()){ el.style.display='none'; KAT_SRC[pf]='cenik'; return; }
   el.style.display='';
   el.innerHTML=[['cenik','📋 Můj ceník'],['katalog','🔎 Katalog materiálů']].map(s=>
     '<button type="button" class="chip'+(KAT_SRC[pf]===s[0]?' active':'')+'" onclick="katSetSrc(\''+pf+'\',\''+s[0]+'\')">'+s[1]+'</button>').join('');
@@ -4824,7 +4895,7 @@ function katSetSrc(pf, s){
 function katPickMode(pf){
   katSrcRender(pf);
   const inp=document.getElementById(pf+'PickSearch'), list=document.getElementById(pf+'PickList'), chips=document.getElementById(pf+'PickChips');
-  if(KAT_SRC[pf]!=='katalog' || !katOn()){
+  if(KAT_SRC[pf]!=='katalog'){
     clearTimeout(KAT_T[pf]); KAT_SEQ[pf]++;
     inp.placeholder='Hledat v ceníku…'; list.style.maxHeight='220px'; chips.style.display='';
     return false;
@@ -4832,6 +4903,7 @@ function katPickMode(pf){
   inp.placeholder='Hledat v katalogu – název, značka, kód nebo EAN…';
   chips.style.display='none'; list.style.maxHeight='400px';
   updateIdxNote(pf+'IdxNote', pf+'Kontakt');
+  if(!katOn()){ list.innerHTML=katNeniNastaven(); return true; }
   katSearch(pf, inp.value);
   return true;
 }
@@ -4866,7 +4938,8 @@ function katRenderRes(pf){
     const c=katNajdiVCeniku(it);
     const cena=c ? c.cena : it.cena_bez_dph;
     const meta=[it.ean?'EAN '+esc(it.ean):'', 'kód '+esc(it.kod), esc([it.tema,it.skupina].filter(Boolean).join(' › '))].filter(Boolean).join(' · ');
-    return '<button type="button" class="pick kat-pick" onclick="katPick(\''+pf+'\','+i+')" title="'+(c?'Přidat do dokladu (položka už je v ceníku)':'Přidat do dokladu a uložit do ceníku')+'">'+
+    const tip= pf==='cn' ? (c?'Položka už je v ceníku':'Uložit do ceníku') : (c?'Přidat do dokladu (položka už je v ceníku)':'Přidat do dokladu a uložit do ceníku');
+    return '<button type="button" class="pick kat-pick" onclick="katPick(\''+pf+'\','+i+')" title="'+tip+'">'+
       katImg(it.foto_url,'kat-img')+
       '<span class="kat-main"><b>'+esc(it.nazev)+'</b><span class="kat-meta">'+meta+'</span></span>'+
       '<span class="kat-cena"><b>'+(cena==null?'bez ceny':fmtCena(cena))+'</b><span class="small muted">za '+esc(c?c.mj:katMj(it.mj))+' bez DPH</span>'+
@@ -4877,6 +4950,10 @@ function katRenderRes(pf){
 function katPick(pf, i){
   const it=(KAT_RES[pf]||[])[i]; if(!it) return;
   const r=katDoCeniku(it);
+  if(pf==='cn'){
+    showToast(r.nova ? '„'+r.c.nazev+'“ uloženo do ceníku.' : '„'+r.c.nazev+'“ už v ceníku je – doplněny údaje z katalogu.');
+    katRenderRes(pf); return;
+  }
   if(pf==='fa') faAddFromCenik(r.c); else nbAddFromCenik(r.c);
   if(it.cena_bez_dph==null) showToast('„'+r.c.nazev+'“ nemá v katalogu cenu – doplňte ji v řádku.', true);
   else if(r.nova) showToast('„'+r.c.nazev+'“ přidáno a uloženo i do ceníku.');
@@ -4886,7 +4963,7 @@ function katPick(pf, i){
 /* --- ceník: aktualizace z katalogu --- */
 let KAT_SYNC=[];
 async function katSync(){
-  if(!katOn()) return;
+  if(!katOn()){ if(confirm('Katalog materiálů zatím není připojený. Otevřít nastavení katalogu?')) katOtevriNastaveni(); return; }
   const kand=DB.cenik.filter(c=>c.katKod || (c.ean && /^\d{8,14}$/.test(c.ean)));
   if(!kand.length){ showToast('V ceníku zatím nejsou položky z katalogu ani položky s vyplněným EAN.', true); return; }
   const btn=document.getElementById('btnKatSync'), t0=btn.textContent;
@@ -4979,8 +5056,18 @@ function katSyncApply(){
 
 katInitPickers();
 document.getElementById('btnKatSync').onclick=katSync;
+document.getElementById('btnKatBrowse').onclick=()=>{
+  document.getElementById('katBrowseModal').classList.add('show');
+  const inp=document.getElementById('cnPickSearch');
+  if(!katOn()){ document.getElementById('cnPickList').innerHTML=katNeniNastaven(); return; }
+  katSearch('cn', inp.value); setTimeout(()=>inp.focus(),50);
+};
+document.getElementById('cnPickSearch').oninput=e=>{ if(katOn()) katSearch('cn', e.target.value); };
+document.getElementById('ns_katTest').onclick=katNsTest;
+document.getElementById('ns_katClear').onclick=katNsClear;
+document.querySelector('nav.tabs button[data-tab=nastaveni]').addEventListener('click', ()=>setTimeout(katNsRender,0));
 document.getElementById('katSyncApply').onclick=katSyncApply;
-if(katOn()) TIPS.push({i:'🔎', t:'Katalog materiálů', x:'U nabídky nebo faktury klikněte na „＋ Z ceníku“ a přepněte na „Katalog materiálů“. Vybraná položka se vloží do dokladu a sama se uloží i do vašeho ceníku. Tlačítkem „Aktualizovat z katalogu“ v Ceníku pak hlídáte aktuální ceny.'});
+TIPS.push({i:'🔎', t:'Katalog materiálů', x:'V Ceníku klikněte na „Katalog materiálů“, nebo u nabídky či faktury na „＋ Z ceníku“ → „Katalog materiálů“. Vybraná položka se uloží do vašeho ceníku i s fotkou a EAN. Tlačítkem „Aktualizovat z katalogu“ hlídáte aktuální ceny. Připojení se nastavuje v Nastavení → Katalog materiálů.'});
 
 boot();
 initTips();
