@@ -187,6 +187,10 @@
   .badge.kat{background:#e8f0f8;color:#2d5a8a}
   .badge.katoff{background:var(--warn-bg);color:var(--warn)}
   .kat-diff-up{color:var(--err)} .kat-diff-down{color:var(--ok)}
+  .kat-stx{font-size:12px;color:var(--navy-3);margin-top:1px}
+  .kat-stx b{font-weight:600}
+  .stx-ok{color:var(--ok)} .stx-no{color:var(--muted)} .stx-malo{color:var(--warn)}
+  #stxBody table td{vertical-align:top}
 
   /* ---- tisková šablona (nabídka) ---- */
   #printArea{display:none}
@@ -463,6 +467,7 @@
           <button class="btn sm" id="btnNbPick" type="button">＋ Z ceníku</button>
           <button class="btn sm" id="btnNbEmpty" type="button">＋ Prázdný řádek</button>
           <button class="btn sm" id="btnNbTable" type="button">⬆ Z tabulky</button>
+          <button class="btn sm" id="btnNbStx" type="button" title="Poslat do Stavimexu e-mailem poptávku materiálu z této nabídky s prosbou o potvrzení cen">✉ Poptávka Stavimex</button>
         </div>
         <div id="nbPicker" style="display:none;border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:14px;background:var(--cream)">
           <div id="nbIdxNote" class="small" style="color:var(--gold-ink);margin-bottom:8px"></div>
@@ -540,7 +545,8 @@
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
           <b style="color:var(--navy);font-size:16px">Položky</b><div class="head-spacer"></div>
           <button class="btn sm" id="btnFaPick" type="button">＋ Z ceníku</button>
-          <button class="btn sm" id="btnFaEmpty" type="button">＋ Prázdný řádek</button></div>
+          <button class="btn sm" id="btnFaEmpty" type="button">＋ Prázdný řádek</button>
+          <button class="btn sm" id="btnFaStx" type="button" title="Poslat do Stavimexu e-mailem poptávku materiálu s prosbou o potvrzení cen">✉ Poptávka Stavimex</button></div>
         <div id="faPicker" style="display:none;border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:14px;background:var(--cream)">
           <div id="faIdxNote" class="small" style="color:var(--gold-ink);margin-bottom:8px"></div>
           <div id="faPickChips" class="chips"></div>
@@ -888,6 +894,29 @@
       <div id="cnPickList" style="margin-top:10px;max-height:460px;overflow:auto"></div>
     </div>
     <div class="modal-foot"><span class="msg" id="cnPickMsg"></span><button class="btn gold" data-close>Hotovo</button></div>
+  </div>
+</div>
+
+<!-- ===== POPTÁVKA STAVIMEX ===== -->
+<div class="backdrop" id="stxModal">
+  <div class="modal" style="max-width:900px">
+    <div class="modal-head"><h3>Cenová poptávka do Stavimexu</h3><button class="x" data-close>×</button></div>
+    <div class="modal-body">
+      <div class="grid">
+        <div class="field"><label>Prodejna (odběr)</label><select id="stxProdejna">
+          <option value="malesice">Malešice</option><option value="liben">Libeň</option><option value="">Kterákoli</option></select></div>
+        <div class="field"><label>E-mail Stavimexu</label><input id="stxEmail" type="email" placeholder="např. prodej@stavimex.cz"></div>
+        <div class="field full"><label>Poznámka do poptávky <span class="muted small">(termín, doprava, místo dodání…)</span></label><textarea id="stxPozn" rows="2"></textarea></div>
+      </div>
+      <div id="stxInfo" class="small" style="margin:12px 0 8px;font-weight:600;color:var(--navy)"></div>
+      <div id="stxBody" style="max-height:340px;overflow:auto"></div>
+    </div>
+    <div class="modal-foot">
+      <span class="msg" id="stxMsg"></span>
+      <button class="btn" data-close>Zavřít</button>
+      <button class="btn" id="stxCopy" type="button">Kopírovat text</button>
+      <button class="btn gold" id="stxSend" type="button">✉ Otevřít e-mail</button>
+    </div>
   </div>
 </div>
 
@@ -3884,7 +3913,7 @@ function autoAddToCenik(polozky){
   });
   if(added){ renderCenik(); showToast(added+(added===1?' nová položka přidána':' nových položek přidáno')+' do ceníku.'); }
 }
-function nbAddFromCenik(c){ if(!c) return; NB.polozky.push({nazev:c.nazev,mj:c.mj,mnozstvi:1,cena:priceForAdd(c.cena,val('nbKontakt'),c.nazev),sleva:0,kat:katFromCenik(c.kategorie)}); renderNbItems(); }
+function nbAddFromCenik(c){ if(!c) return; NB.polozky.push({nazev:c.nazev,mj:c.mj,mnozstvi:1,cena:priceForAdd(c.cena,val('nbKontakt'),c.nazev),sleva:0,kat:katFromCenik(c.kategorie),...(c.katKod?{katKod:c.katKod}:{})}); renderNbItems(); }
 function nbAddEmpty(){ NB.polozky.push({nazev:'',mj:'ks',mnozstvi:1,cena:0,sleva:0,kat:'prace'}); renderNbItems(); }
 function nbDelRow(i){ NB.polozky.splice(i,1); renderNbItems(); }
 
@@ -4077,7 +4106,7 @@ function faRecalc(){
   if(FA.rezim==='neplatce') h+='<div class="small muted" style="text-align:right;margin-top:6px">Dodavatel není plátcem DPH.</div>';
   h+='</div>'; box.innerHTML=h;
 }
-function faAddFromCenik(c){ if(!c) return; FA.polozky.push({nazev:c.nazev,mj:c.mj,mnozstvi:1,cena:priceForAdd(c.cena,val('faKontakt'),c.nazev),sleva:0,sazba:21,kat:katFromCenik(c.kategorie)}); renderFaItems(); }
+function faAddFromCenik(c){ if(!c) return; FA.polozky.push({nazev:c.nazev,mj:c.mj,mnozstvi:1,cena:priceForAdd(c.cena,val('faKontakt'),c.nazev),sleva:0,sazba:21,kat:katFromCenik(c.kategorie),...(c.katKod?{katKod:c.katKod}:{})}); renderFaItems(); }
 function faAddEmpty(){ FA.polozky.push({nazev:'',mj:'ks',mnozstvi:1,cena:0,sleva:0,sazba:21,kat:'prace'}); renderFaItems(); }
 function faDelRow(i){ FA.polozky.splice(i,1); renderFaItems(); }
 function faPickRender(){
@@ -4121,7 +4150,7 @@ function fakturaFromNabidka(id){
   const rec={ id:uid(), cislo:nextFakturaCislo(), vs:nextFakturaCislo().replace(/\D/g,''), ks:'', kontaktId:n.kontaktId, objednavka:'',
     datumVystaveni:today(), duzp:today(), splatnost:plusDays(today(),14), formaUhrady:'Převodem',
     rezim:'pdp', pdpText:DEFAULT_PDP, akce:n.predmet||'', pozn:'', stav:'Vystavená',
-    polozky:(n.polozky||[]).map(x=>({nazev:x.nazev,mj:x.mj,mnozstvi:x.mnozstvi,cena:x.cena,sleva:x.sleva||0,sazba:21,kat:normKatLine(x.kat)})) };
+    polozky:(n.polozky||[]).map(x=>({nazev:x.nazev,mj:x.mj,mnozstvi:x.mnozstvi,cena:x.cena,sleva:x.sleva||0,sazba:21,kat:normKatLine(x.kat),...(x.katKod?{katKod:x.katKod}:{})})) };
   faOpenEditor(rec, true);
   showToast('Faktura vytvořena z nabídky — zkontrolujte a uložte.');
 }
@@ -4950,6 +4979,7 @@ function katSearch(pf, q){
       const res=await katRpc('katalog_hledat', {dotaz:q, pocet:KAT_MAX});
       if(seq!==KAT_SEQ[pf] || KAT_SRC[pf]!=='katalog') return;
       KAT_RES[pf]=Array.isArray(res)?res:[]; KAT_LASTQ[pf]=q; katRenderRes(pf);
+      stxNacti(KAT_RES[pf].map(x=>x.kod)).then(zmena=>{ if(zmena && KAT_LASTQ[pf]===q && KAT_SRC[pf]==='katalog') katRenderRes(pf); });
     }catch(e){
       if(seq!==KAT_SEQ[pf] || KAT_SRC[pf]!=='katalog') return;
       KAT_RES[pf]=[]; KAT_LASTQ[pf]='';
@@ -4967,7 +4997,7 @@ function katRenderRes(pf){
     const tip= pf==='cn' ? (c?'Položka už je v ceníku':'Uložit do ceníku') : (c?'Přidat do dokladu (položka už je v ceníku)':'Přidat do dokladu a uložit do ceníku');
     return '<button type="button" class="pick kat-pick" onclick="katPick(\''+pf+'\','+i+')" title="'+tip+'">'+
       katImg(it.foto_url,'kat-img')+
-      '<span class="kat-main"><b>'+esc(it.nazev)+'</b><span class="kat-meta">'+meta+'</span></span>'+
+      '<span class="kat-main"><b>'+esc(it.nazev)+'</b><span class="kat-meta">'+meta+'</span>'+stxRadek(it.kod)+'</span>'+
       '<span class="kat-cena"><b>'+(cena==null?'bez ceny':fmtCena(cena))+'</b><span class="small muted">za '+esc(c?c.mj:katMj(it.mj))+' bez DPH</span>'+
         (c?'<span class="badge kat" style="margin-top:3px">v ceníku</span>':'')+'</span>'+
     '</button>';
@@ -5090,6 +5120,175 @@ function katSyncApply(){
   KAT_SYNC=[]; renderCenik(); markDirty();
   showToast('Ceník aktualizován z katalogu'+(zmen?' – změněno '+zmen+(zmen===1?' cena':(zmen<5?' ceny':' cen')):'')+(prerazeno?', do kategorií zařazeno '+prerazeno:'')+'.');
 }
+
+/* ============================================================
+   STAVIMEX – živé zásoby a ceny prodejen (Malešice, Libeň) + e-mailová poptávka
+   Data plní Supabase každou hodinu (stavimex.sql). Aplikace je jen čte.
+   ============================================================ */
+const STX_PRODEJNY={malesice:'Malešice', liben:'Libeň'};
+const STX={}, STX_ZNAME={};          // kód katalogu -> {malesice:karta, liben:karta}; které kódy už jsou načtené
+let STX_VYPNUTO=false;               // funkce v Supabase chybí → dál se neptat
+async function stxNacti(kody){
+  kody=[...new Set((kody||[]).filter(k=>k && !STX_ZNAME[k]))];
+  if(!kody.length || STX_VYPNUTO || !katOn()) return false;
+  try{
+    for(let i=0;i<kody.length;i+=400){
+      const cast=kody.slice(i,i+400);
+      const res=await katRpc('stavimex_pro_katalog', {kody:cast});
+      cast.forEach(k=>{ STX_ZNAME[k]=1; });
+      (res||[]).forEach(r=>{ const o=STX[r.kod]=STX[r.kod]||{}; if(!o[r.prodejna]) o[r.prodejna]=r; });   // první = nejlepší shoda
+    }
+    return true;
+  }catch(e){
+    if(/katalog není|404/.test(e.message||'')) STX_VYPNUTO=true;
+    return false;
+  }
+}
+function stxZasoba(k){ if(!k) return '<span class="stx-no">–</span>'; const z=Number(k.zasoba)||0;
+  return '<span class="'+(z>0?'stx-ok':'stx-no')+'">'+fmtNum(z)+' '+esc(katMj(k.mj))+'</span>'; }
+function stxRadek(kod){
+  const o=STX[kod]; if(!o) return '';
+  const m=o.malesice, l=o.liben, c=(m&&m.cena_bez_dph!=null)?m:l;
+  return '<span class="kat-stx">🏬 Stavimex: Malešice <b>'+stxZasoba(m)+'</b> · Libeň <b>'+stxZasoba(l)+'</b>'+
+         (c&&c.cena_bez_dph!=null?' · <b>'+fmtCena(c.cena_bez_dph)+'</b> bez DPH':'')+'</span>';
+}
+
+/* --- poptávka --- */
+let STX_POP=null;   // {pf, doc, radky:[...]}
+function stxKatKod(p){
+  if(p.katKod) return p.katKod;
+  const c=DB.cenik.find(x=>x.katKod && norm(x.nazev)===norm(p.nazev));
+  return c ? c.katKod : '';
+}
+async function stxPoptavka(pf){
+  const doc = pf==='fa' ? FA : NB;
+  if(!doc || !(doc.polozky||[]).length){ showToast('Doklad zatím nemá žádné položky.', true); return; }
+  if(!katOn()){ if(confirm('Katalog materiálů není připojený. Otevřít nastavení?')) katOtevriNastaveni(); return; }
+  const radky=doc.polozky.map((p,i)=>({i, p, katKod:stxKatKod(p)})).filter(r=>(r.p.nazev||'').trim());
+  document.getElementById('stxBody').innerHTML='<div class="kat-info">Načítám ceny a zásoby Stavimexu…</div>';
+  document.getElementById('stxInfo').textContent='';
+  setVal('stxEmail', (DB.nastaveni&&DB.nastaveni.stavimexEmail)||'');
+  setVal('stxProdejna', (DB.nastaveni&&DB.nastaveni.stavimexProdejna!=null)?DB.nastaveni.stavimexProdejna:'malesice');
+  setVal('stxPozn','');
+  const posl=(doc.poptavkyStavimex||[]).slice(-1)[0];
+  document.getElementById('stxMsg').textContent= posl ? 'Naposledy odesláno '+fmtDatumKat(posl.datum)+(posl.prodejna?' ('+STX_PRODEJNY[posl.prodejna]+')':'')+'.' : '';
+  document.getElementById('stxModal').classList.add('show');
+  STX_POP={pf, doc, radky};
+  try{
+    STX_VYPNUTO=false;
+    const kody=radky.map(r=>r.katKod).filter(Boolean);
+    kody.forEach(k=>{ delete STX_ZNAME[k]; delete STX[k]; });   // čerstvá data
+    await stxNacti(kody);
+    if(STX_VYPNUTO){ document.getElementById('stxBody').innerHTML='<div class="kat-info err">V Supabase zatím nejsou data Stavimexu – spusťte stavimex.sql.</div>'; }
+  }catch(e){}
+  radky.forEach(r=>{ r.stx=STX[r.katKod]||null; r.sel=!!r.stx; });
+  if(!STX_VYPNUTO) stxRender();
+}
+function stxKarta(r){
+  if(!r.stx) return null;
+  const pr=val('stxProdejna');
+  return (pr && r.stx[pr]) || r.stx.malesice || r.stx.liben || null;
+}
+function stxRender(){
+  const P=STX_POP; if(!P) return;
+  const pr=val('stxProdejna');
+  const sp=P.radky.filter(r=>r.stx).length;
+  document.getElementById('stxInfo').textContent='Položek na dokladu: '+P.radky.length+' · spárováno se Stavimexem: '+sp+
+    (sp<P.radky.length?' · ostatní můžete přidat ručně zaškrtnutím (poptají se podle názvu)':'');
+  let h='<div class="card"><table><thead><tr><th style="width:30px"></th><th>Položka</th><th class="num">Množství</th><th class="num">Cena Stavimex bez DPH</th><th class="num">Malešice</th><th class="num">Libeň</th></tr></thead><tbody>';
+  P.radky.forEach((r,idx)=>{
+    const k=stxKarta(r), mn=Number(r.p.mnozstvi)||0;
+    const zas= k ? Number(k.zasoba)||0 : null;
+    const malo = k && pr && r.stx[pr] && zas < mn;
+    h+='<tr'+(r.stx?'':' style="opacity:.75"')+'><td><input type="checkbox" data-stx="'+idx+'"'+(r.sel?' checked':'')+'></td>'+
+      '<td><b>'+esc(r.p.nazev)+'</b>'+
+        (k?'<br><span class="small muted">karta '+esc(k.cislo)+(k.nazev&&norm(k.nazev)!==norm(r.p.nazev)?' · '+esc(k.nazev):'')+' · párováno: '+esc(k.parovani)+'</span>'
+          :'<br><span class="small muted">'+(r.katKod?'ve Stavimexu nenalezeno':'není propojeno s katalogem')+'</span>')+
+        (malo?'<br><span class="small stx-malo">⚠ v prodejně '+STX_PRODEJNY[pr]+' skladem jen '+fmtNum(zas)+' '+esc(katMj(k.mj))+'</span>':'')+'</td>'+
+      '<td class="num">'+fmtNum(mn)+' '+esc(r.p.mj||'')+'</td>'+
+      '<td class="num">'+(k&&k.cena_bez_dph!=null?fmtCena(k.cena_bez_dph)+'<br><span class="small muted">za '+esc(katMj(k.mj))+'</span>':'—')+'</td>'+
+      '<td class="num">'+(r.stx?stxZasoba(r.stx.malesice):'—')+'</td>'+
+      '<td class="num">'+(r.stx?stxZasoba(r.stx.liben):'—')+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  document.getElementById('stxBody').innerHTML=h;
+  document.querySelectorAll('[data-stx]').forEach(el=>el.onchange=()=>{ P.radky[+el.dataset.stx].sel=el.checked; });
+}
+function stxText(){
+  const P=STX_POP, pr=val('stxProdejna'), d=DB.dodavatel||{};
+  const vyb=P.radky.filter(r=>r.sel);
+  const sKartou=vyb.filter(r=>stxKarta(r)), bez=vyb.filter(r=>!stxKarta(r));
+  const predmet=((P.pf==='fa'?val('faAkce'):val('nbPredmet'))||(P.pf==='fa'?P.doc.akce:P.doc.predmet)||'').trim();
+  const subject='Cenová poptávka materiálu'+(d.nazev?' – '+d.nazev:'')+(predmet?' – '+predmet:'');
+  const L=[];
+  L.push('Dobrý den,','');
+  L.push('prosím o potvrzení cen a dostupnosti níže uvedeného materiálu'+(pr?' (odběr: prodejna '+STX_PRODEJNY[pr]+')':'')+'.');
+  if(predmet) L.push('Akce: '+predmet);
+  L.push('');
+  let celkem=0, n=0;
+  sKartou.forEach(r=>{
+    const k=stxKarta(r), mn=Number(r.p.mnozstvi)||0, mj=r.p.mj||katMj(k.mj);
+    n++;
+    let t=n+'. karta '+k.cislo+' – '+(k.nazev||r.p.nazev)+' – '+fmtNum(mn)+' '+mj;
+    if(k.cena_bez_dph!=null){
+      const sum=Math.round(mn*Number(k.cena_bez_dph)*100)/100; celkem+=sum;
+      t+='\n   cena dle ceníku: '+fmtCena(k.cena_bez_dph)+'/'+katMj(k.mj)+' bez DPH (celkem '+fmtCena(sum)+')';
+    }
+    if(r.p.katKod||r.katKod){ const e=(DB.cenik.find(c=>c.katKod===r.katKod)||{}).ean; if(e) t+='\n   EAN '+e; }
+    L.push(t);
+  });
+  if(bez.length){
+    if(sKartou.length) L.push('');
+    L.push('Položky, pro které jsem nenašel kartu – prosím o nabídku:');
+    bez.forEach(r=>{ n++; L.push(n+'. '+r.p.nazev+' – '+fmtNum(Number(r.p.mnozstvi)||0)+' '+(r.p.mj||'')); });
+  }
+  if(celkem){ L.push('','Celkem dle ceníku: '+fmtCena(celkem)+' bez DPH'); }
+  const pozn=val('stxPozn').trim(); if(pozn) L.push('','Poznámka: '+pozn);
+  L.push('','Prosím o potvrzení uvedených cen, případně o nabídku lepší ceny pro tento odběr, a o informaci o dostupnosti a termínu dodání.','');
+  L.push('Děkuji a přeji hezký den');
+  if(d.nazev) L.push(d.nazev);
+  const kont=[d.tel,d.email].filter(Boolean).join(' · '); if(kont) L.push(kont);
+  return {subject, body:L.join('\r\n'), pocet:vyb.length, celkem};
+}
+async function stxDoSchranky(t){
+  try{ await navigator.clipboard.writeText(t); return true; }catch(e){}
+  try{ const ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); const ok=document.execCommand('copy'); ta.remove(); return ok; }catch(e){ return false; }
+}
+function stxZapamatuj(){
+  DB.nastaveni.stavimexEmail=val('stxEmail').trim();
+  DB.nastaveni.stavimexProdejna=val('stxProdejna');
+  markDirty();
+}
+async function stxKopiruj(){
+  if(!STX_POP) return; const t=stxText();
+  if(!t.pocet){ showToast('Vyberte aspoň jednu položku.', true); return; }
+  const ok=await stxDoSchranky('Předmět: '+t.subject+'\r\n\r\n'+t.body);
+  showToast(ok?'Text poptávky je ve schránce – vložte ho do e-mailu (Ctrl+V).':'Kopírování se nepodařilo.', !ok);
+}
+async function stxOdesli(){
+  const P=STX_POP; if(!P) return; const t=stxText();
+  if(!t.pocet){ showToast('Vyberte aspoň jednu položku.', true); return; }
+  const email=val('stxEmail').trim();
+  if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ showToast('Zkontrolujte e-mail Stavimexu.', true); return; }
+  stxZapamatuj();
+  let url='mailto:'+encodeURIComponent(email)+'?subject='+encodeURIComponent(t.subject)+'&body='+encodeURIComponent(t.body);
+  let dlouhy=false;
+  if(url.length>1900){   // dlouhé e-maily: plný text do schránky, do mailto jen výzva k vložení
+    dlouhy=true;
+    await stxDoSchranky(t.body);
+    url='mailto:'+encodeURIComponent(email)+'?subject='+encodeURIComponent(t.subject)+'&body='+encodeURIComponent('(Text poptávky je ve schránce – vložte ho sem klávesami Ctrl+V.)\r\n\r\n');
+  }
+  P.doc.poptavkyStavimex=P.doc.poptavkyStavimex||[];
+  P.doc.poptavkyStavimex.push({datum:today(), prodejna:val('stxProdejna'), email, polozek:t.pocet, celkem:t.celkem});
+  const a=document.createElement('a'); a.href=url; a.click();
+  showToast(dlouhy?'Otevírám e-mail – text poptávky je ve schránce, vložte ho Ctrl+V. Nezapomeňte doklad uložit.':'Otevírám e-mail s poptávkou. Nezapomeňte doklad uložit.');
+  document.getElementById('stxMsg').textContent='Odesláno '+fmtDatumKat(today())+'.';
+}
+document.getElementById('btnNbStx').onclick=()=>stxPoptavka('nb');
+document.getElementById('btnFaStx').onclick=()=>stxPoptavka('fa');
+document.getElementById('stxProdejna').onchange=()=>stxRender();
+document.getElementById('stxCopy').onclick=stxKopiruj;
+document.getElementById('stxSend').onclick=stxOdesli;
 
 katInitPickers();
 document.getElementById('btnKatSync').onclick=katSync;
