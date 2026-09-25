@@ -4765,12 +4765,13 @@ function initTips(){ const n=document.getElementById('tipNext'); if(!n) return; 
    Publishable klíč je určený pro prohlížeč – do HTML se smí dát. Secret klíč NIKDY.
    ============================================================ */
 const KATALOG = {
-  url: 'https://hkzhjoveiqadezmvksdz.supabase.co',        // projekt YeY – Kancelář pro řemeslníky
-  key: 'sb_publishable_WUy9urfE9n5O2SelitV6FA_mhzCUrM_'   // publishable klíč (veřejný, smí být v HTML)
+  url: 'https://fvrpuddkarujfttoaavb.supabase.co',        // projekt s katalogem materiálů
+  key: 'sb_publishable_1Y5nEfLwKmJxlnbkLmZgMg_Rzs7WQQG'   // publishable klíč (veřejný, smí být v HTML)
 };                                                         // hodnoty z Nastavení → Katalog materiálů mají přednost
 
 function katCfg(){
   let n={}; try{ n=(DB && DB.nastaveni && DB.nastaveni.katalog) || {}; }catch(e){}
+  if(/hkzhjoveiqadezmvksdz/.test(n.url||'')) n={};   // dřívější chybně předvyplněný projekt – ignorovat
   let k={}; try{ k=KATALOG; }catch(e){}
   return { url:(n.url||k.url||'').trim(), key:(n.key||k.key||'').trim() };
 }
@@ -4783,7 +4784,7 @@ async function katRpc(fn, body){
   if(!r.ok){
     let t=''; try{ t=(await r.text()).slice(0,160); }catch(e){}
     if(r.status===401 || r.status===403) throw new Error('Supabase odmítl klíč – zkontrolujte publishable klíč v Nastavení');
-    if(r.status===404) throw new Error('v Supabase chybí funkce katalogu – spusťte katalog_verejne_api.sql a katalog_foto.sql');
+    if(r.status===404){ const id=(c.url.match(/https?:\/\/([^.\/]+)/)||[])[1]||c.url; throw new Error('v projektu „'+id+'“ katalog není – buď je adresa z jiného projektu, než kam jste katalog nahrál, nebo v něm ještě nejsou spuštěné katalog_verejne_api.sql a katalog_foto.sql'); }
     throw new Error('HTTP '+r.status+(t?' – '+t:''));
   }
   return r.json();
