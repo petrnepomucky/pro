@@ -4966,9 +4966,9 @@ function katSearch(pf, q){
   q=(q||'').trim();
   const list=document.getElementById(pf+'PickList');
   clearTimeout(KAT_T[pf]);
-  if(q.length<2){
+  if(!q.split(/\s+/).some(w=>w.length>=3)){
     KAT_SEQ[pf]++; KAT_RES[pf]=[]; KAT_LASTQ[pf]='';
-    list.innerHTML='<div class="kat-info">Napište aspoň 2 znaky. Hledá se v názvu, značce, kódu i EAN – na pořadí slov ani diakritice nezáleží (např. <i>ytong 300</i>).</div>';
+    list.innerHTML='<div class="kat-info">Napište aspoň 3 znaky. Hledá se v názvu, značce, kódu i EAN – na pořadí slov ani diakritice nezáleží (např. <i>ytong 300</i>).</div>';
     return;
   }
   if(q===KAT_LASTQ[pf]){ katRenderRes(pf); return; }
